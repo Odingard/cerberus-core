@@ -74,6 +74,12 @@ Then run the stress harness:
 npm run stress:report -- --corpus-root /absolute/path/to/corpus --webhook-url http://127.0.0.1:7777/capture
 ```
 
+To measure stability across repeated runs of the same scenarios:
+
+```bash
+npm run stress:report -- --validation-sequence repeat-pack-01 --repeats 3 --corpus-root /absolute/path/to/corpus --webhook-url http://127.0.0.1:7777/capture
+```
+
 ## Difficulty ladder
 
 - `L1` Authorized control
@@ -90,3 +96,4 @@ npm run stress:report -- --corpus-root /absolute/path/to/corpus --webhook-url ht
 - HTML: `test-results/stress-harness-report.html`
 
 The HTML report is meant to be operator-legible for customer briefings and analyst reviews.
+It now includes per-level rates and scenario stability when `--repeats` is greater than `1`.

@@ -419,6 +419,8 @@ async function runScenario(definition) {
     );
 
     return {
+      scenarioId: `${definition.vertical}-${definition.level.id}-${definition.iteration}`,
+      iteration: definition.iteration,
       vertical: definition.vertical,
       level: definition.level.id,
       name: definition.level.name,
@@ -451,6 +453,10 @@ function summarize(results) {
         {
           total: entries.length,
           passed: entries.filter((entry) => entry.passed).length,
+          passRate:
+            entries.length === 0
+              ? 0
+              : entries.filter((entry) => entry.passed).length / entries.length,
           averageScore:
             entries.length === 0
               ? 0
@@ -468,17 +474,52 @@ function summarize(results) {
         {
           total: entries.length,
           passed: entries.filter((entry) => entry.passed).length,
+          passRate:
+            entries.length === 0
+              ? 0
+              : entries.filter((entry) => entry.passed).length / entries.length,
         },
       ];
     }),
+  );
+
+  const scenarioGroups = new Map();
+  for (const result of results) {
+    const key = `${result.vertical}:${result.level}:${result.technique}`;
+    const existing = scenarioGroups.get(key);
+    if (existing) {
+      existing.push(result);
+    } else {
+      scenarioGroups.set(key, [result]);
+    }
+  }
+
+  const byScenario = Object.fromEntries(
+    [...scenarioGroups.entries()].map(([key, entries]) => [
+      key,
+      {
+        total: entries.length,
+        passed: entries.filter((entry) => entry.passed).length,
+        passRate:
+          entries.length === 0
+            ? 0
+            : entries.filter((entry) => entry.passed).length / entries.length,
+        stable: entries.every((entry) => entry.passed),
+      },
+    ]),
   );
 
   return {
     total: results.length,
     passed: results.filter((result) => result.passed).length,
     failed: results.filter((result) => !result.passed).length,
+    passRate:
+      results.length === 0
+        ? 0
+        : results.filter((result) => result.passed).length / results.length,
     byVertical,
     byLevel,
+    byScenario,
   };
 }
 
@@ -511,6 +552,7 @@ async function main() {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
+  const repeats = Math.max(1, Number.parseInt(String(args.repeats ?? '1'), 10) || 1);
 
   const discovered = await discoverCorpus(corpusRoot, selectedVerticals);
   if (discovered.length === 0) {
@@ -522,14 +564,17 @@ async function main() {
   const scenarios = [];
   for (const corpus of discovered) {
     const trustedText = await readFile(corpus.trustedFile, 'utf8');
-    for (const level of STRESS_LEVELS) {
-      const plan = buildLevelPlan(level, trustedText, corpus.vertical, webhookUrl);
-      scenarios.push({
-        ...corpus,
-        ...plan,
-        level,
-        webhookUrl,
-      });
+    for (let iteration = 1; iteration <= repeats; iteration += 1) {
+      for (const level of STRESS_LEVELS) {
+        const plan = buildLevelPlan(level, trustedText, corpus.vertical, webhookUrl);
+        scenarios.push({
+          ...corpus,
+          ...plan,
+          level,
+          webhookUrl,
+          iteration,
+        });
+      }
     }
   }
 
@@ -543,6 +588,7 @@ async function main() {
   const report = {
     generatedAt: new Date().toISOString(),
     validationSequence,
+    repeats,
     corpusRoot,
     webhookUrl,
     summary: summarize(results),
@@ -556,6 +602,7 @@ async function main() {
 
   console.log('\nStress Harness Summary');
   console.log(`  Validation sequence: ${validationSequence}`);
+  console.log(`  Repeats per scenario: ${repeats}`);
   console.log(`  Total scenarios: ${report.summary.total}`);
   console.log(`  Passed: ${report.summary.passed}`);
   console.log(`  Failed: ${report.summary.failed}`);

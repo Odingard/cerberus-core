@@ -36,6 +36,19 @@ const levelRows = Object.entries(report.summary.byLevel)
       <tr>
         <td>${escapeHtml(level)}</td>
         <td>${summary.passed}/${summary.total}</td>
+        <td>${(summary.passRate * 100).toFixed(1)}%</td>
+      </tr>`,
+  )
+  .join('');
+
+const scenarioRows = Object.entries(report.summary.byScenario ?? {})
+  .map(
+    ([scenario, summary]) => `
+      <tr>
+        <td>${escapeHtml(scenario)}</td>
+        <td>${summary.passed}/${summary.total}</td>
+        <td>${(summary.passRate * 100).toFixed(1)}%</td>
+        <td>${summary.stable ? 'stable' : 'variable'}</td>
       </tr>`,
   )
   .join('');
@@ -105,11 +118,13 @@ const html = `<!doctype html>
       <div class="meta">
         <div><strong>Validation sequence:</strong> ${escapeHtml(report.validationSequence ?? 'untracked')}</div>
         <div><strong>Generated at:</strong> ${escapeHtml(report.generatedAt)}</div>
+        <div><strong>Repeats per scenario:</strong> ${escapeHtml(String(report.repeats ?? 1))}</div>
       </div>
       <div class="grid">
         <div class="panel"><div>Total scenarios</div><h2>${report.summary.total}</h2></div>
         <div class="panel"><div>Passed</div><h2>${report.summary.passed}</h2></div>
         <div class="panel"><div>Failed</div><h2>${report.summary.failed}</h2></div>
+        <div class="panel"><div>Overall pass rate</div><h2>${(report.summary.passRate * 100).toFixed(1)}%</h2></div>
       </div>
     </section>
     <section class="grid">
@@ -123,10 +138,17 @@ const html = `<!doctype html>
       <section class="panel">
         <h2>By Difficulty Level</h2>
         <table>
-          <thead><tr><th>Level</th><th>Pass Rate</th></tr></thead>
+          <thead><tr><th>Level</th><th>Pass/Total</th><th>Rate</th></tr></thead>
           <tbody>${levelRows}</tbody>
         </table>
       </section>
+    </section>
+    <section class="panel" style="margin-top: 18px;">
+      <h2>Scenario Stability</h2>
+      <table>
+        <thead><tr><th>Scenario</th><th>Pass/Total</th><th>Rate</th><th>Stability</th></tr></thead>
+        <tbody>${scenarioRows}</tbody>
+      </table>
     </section>
     <section class="scenario-list">${scenarios}</section>
   </main>
