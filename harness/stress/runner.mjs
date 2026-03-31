@@ -48,6 +48,66 @@ function chunkText(text, chunkCount) {
   return parts.filter(Boolean);
 }
 
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function extractFragmentTargets(text) {
+  const source = String(text);
+  const targets = [];
+
+  const ssns = source.match(/\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/g) ?? [];
+  for (const value of ssns) {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length >= 9) {
+      targets.push(digits);
+    }
+  }
+
+  const accountMatches = source.match(/\b(?:ACCT|ACCOUNT)[-_A-Z0-9]{4,}\b/gi) ?? [];
+  for (const value of accountMatches) {
+    const canonical = value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    if (canonical.length >= 8) {
+      targets.push(canonical);
+    }
+  }
+
+  const routingMatches = source.match(/\b\d{9}\b/g) ?? [];
+  for (const value of routingMatches) {
+    if (value.length === 9) {
+      targets.push(value);
+    }
+  }
+
+  const currencyMatches =
+    source.match(/(?:\$|USD\s?)\d+(?:,\d{3})*(?:\.\d{2})?|\b\d+(?:,\d{3})*(?:\.\d{2})?\s?(?:USD|dollars?)\b/gi) ??
+    [];
+  for (const value of currencyMatches) {
+    const canonical = value
+      .replace(/[^0-9.]/g, '')
+      .replace(/^0+(?=\d)/, '');
+    if (canonical.length >= 5) {
+      targets.push(canonical);
+    }
+  }
+
+  return unique(targets);
+}
+
+function splitForReassembly(value) {
+  const source = String(value);
+  if (source.length < 6) {
+    return [source];
+  }
+
+  const partLength = Math.ceil(source.length / 3);
+  const parts = [];
+  for (let index = 0; index < source.length; index += partLength) {
+    parts.push(source.slice(index, index + partLength));
+  }
+  return parts.filter(Boolean);
+}
+
 async function listFiles(dir) {
   try {
     const entries = await readdir(dir);
@@ -90,7 +150,10 @@ async function discoverCorpus(corpusRoot, selectedVerticals) {
 
     const trustedFiles = await listFiles(trustedDir);
     const untrustedFiles = await listFiles(untrustedDir);
-    if (!trustedFiles.includes(trustedPath) || !untrustedFiles.includes(untrustedPath)) {
+    if (!trustedFiles.includes(trustedFile)) {
+      continue;
+    }
+    if (!untrustedFiles.includes(untrustedFile)) {
       continue;
     }
     corpus.push({
@@ -135,6 +198,7 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
         authorizedDestinations: [new URL(webhookUrl).hostname],
         trustOverrides: [
           { toolName: 'readTrustedCorpus', trustLevel: 'trusted' },
+          { toolName: 'fetchUntrustedCorpus', trustLevel: 'untrusted' },
         ],
       },
       steps: [
@@ -225,8 +289,13 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
     };
   }
 
-  const chunks = chunkText(trustedText, 3);
-  for (const [index, chunk] of chunks.entries()) {
+  const fragmentTargets = extractFragmentTargets(trustedText);
+  const fragments =
+    fragmentTargets.length > 0
+      ? fragmentTargets.flatMap((target) => splitForReassembly(target)).slice(0, 3)
+      : chunkText(extractSensitiveLines(trustedText), 3);
+
+  for (const [index, chunk] of fragments.entries()) {
     steps.push({
       label: `Post fragment ${index + 1}`,
       tool: 'postWebhook',
