@@ -22,6 +22,7 @@ import {
   computeSimilarityScore,
   extractDestination,
   isAuthorizedDestination,
+  normalizeDestinationForClustering,
   serializeArguments,
 } from '../layers/l3-classifier.js';
 
@@ -216,12 +217,13 @@ export function detectSplitExfiltration(
 
   const recordsByDestination = new Map<string, OutboundCallRecord[]>();
   for (const record of unauthorizedRecords) {
-    if (!record.destination) continue;
-    const existing = recordsByDestination.get(record.destination);
+    const destinationKey = normalizeDestinationForClustering(record.destination);
+    if (!destinationKey) continue;
+    const existing = recordsByDestination.get(destinationKey);
     if (existing) {
       existing.push(record);
     } else {
-      recordsByDestination.set(record.destination, [record]);
+      recordsByDestination.set(destinationKey, [record]);
     }
   }
 

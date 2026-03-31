@@ -254,7 +254,7 @@ export function isAuthorizedDestination(
     return false;
   }
 
-  const domain = extractDomainFromDestination(destination);
+  const domain = normalizeDestinationForClustering(destination);
   if (!domain) {
     return false;
   }
@@ -268,7 +268,7 @@ export function isAuthorizedDestination(
 /**
  * Extract the domain portion from a destination (email or URL).
  */
-function extractDomainFromDestination(destination: string): string | null {
+export function normalizeDestinationForClustering(destination: string): string | null {
   // Email address
   const atIndex = destination.indexOf('@');
   if (atIndex > 0) {
@@ -280,7 +280,7 @@ function extractDomainFromDestination(destination: string): string | null {
     const url = new URL(destination);
     return url.hostname.toLowerCase();
   } catch {
-    return null;
+    return destination === 'unknown' ? null : destination.toLowerCase();
   }
 }
 
