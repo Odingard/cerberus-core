@@ -12,7 +12,8 @@ pip install cerberus-ai
 
 ## Visual Demo
 
-- Open the animated proof path: [Cerberus Core Demo](./demo.html)
+- Open the hosted proof path: [Cerberus Core Demo](https://odingard.github.io/cerberus-core/)
+- Source lives in this repo at [docs/demo.html](./demo.html)
 - Best flow: run the control first, then run the protected attack, then open the live dashboard link from the demo header
 
 ## TypeScript Quickstart

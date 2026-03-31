@@ -10,6 +10,17 @@ Runtime security for AI agent tool execution.
 
 Cerberus Core is the embeddable runtime enforcement layer for AI agents. It correlates privileged data access, untrusted content ingestion, and outbound behavior at the tool-call level, then interrupts guarded outbound actions before they execute.
 
+![Cerberus Core overview](docs/media/core-proof-overview.svg)
+
+## See It Working
+
+[Open the live public demo](https://odingard.github.io/cerberus-core/)  
+[Open the guided getting started path](docs/getting-started.md)
+
+![Blocked outbound runtime action](docs/media/core-demo-blocked-run.svg)
+
+Cerberus Core is built to prove one thing clearly: if an agent reads sensitive data, ingests untrusted instructions, and then attempts a guarded outbound action, Core can correlate that runtime chain and interrupt it before the tool executes.
+
 ## Install
 
 ```bash
@@ -21,7 +32,8 @@ pip install cerberus-ai
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
-- [Animated Core Demo](docs/demo.html)
+- [Live Demo](https://odingard.github.io/cerberus-core/)
+- [Animated Core Demo Source](docs/demo.html)
 
 ## TypeScript Quickstart
 
