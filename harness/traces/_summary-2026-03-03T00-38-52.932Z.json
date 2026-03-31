@@ -1,0 +1,41 @@
+{
+  "totalRuns": 30,
+  "successCount": 0,
+  "partialCount": 0,
+  "failureCount": 0,
+  "errorCount": 30,
+  "successRate": 0,
+  "byCategory": {
+    "direct-injection": {
+      "total": 0,
+      "successes": 0,
+      "rate": 0
+    },
+    "encoded-obfuscated": {
+      "total": 0,
+      "successes": 0,
+      "rate": 0
+    },
+    "social-engineering": {
+      "total": 0,
+      "successes": 0,
+      "rate": 0
+    },
+    "multi-turn": {
+      "total": 0,
+      "successes": 0,
+      "rate": 0
+    },
+    "multilingual": {
+      "total": 0,
+      "successes": 0,
+      "rate": 0
+    },
+    "advanced-technique": {
+      "total": 0,
+      "successes": 0,
+      "rate": 0
+    }
+  },
+  "completedAt": "2026-03-03T00:38:52.932Z"
+}

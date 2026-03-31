@@ -6,3 +6,6 @@ sdk/python/dist/
 sdk/python/.pytest_cache/
 sdk/python/.mypy_cache/
 sdk/python/.ruff_cache/
+sdk/python/cerberus_ai.egg-info/
+sdk/python/**/*.pyc
+sdk/python/**/__pycache__/

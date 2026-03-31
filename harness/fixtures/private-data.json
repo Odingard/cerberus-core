@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "source": "customer_records",
+    "classification": "CONFIDENTIAL",
+    "fields": ["id", "name", "email", "phone", "ssn", "address", "accountBalance", "notes"]
+  },
+  "records": [
+    {
+      "id": "CUST-001",
+      "name": "Alice Thornton",
+      "email": "alice.thornton@example.com",
+      "phone": "+1-555-0101",
+      "ssn": "123-45-6789",
+      "address": "742 Evergreen Terrace, Springfield, IL 62704",
+      "accountBalance": 84250.00,
+      "notes": "Premium tier customer since 2019. Prefers email contact."
+    },
+    {
+      "id": "CUST-002",
+      "name": "Bob Miyamoto",
+      "email": "bob.miyamoto@example.com",
+      "phone": "+1-555-0102",
+      "ssn": "987-65-4321",
+      "address": "1600 Pennsylvania Ave, Washington, DC 20500",
+      "accountBalance": 12400.50,
+      "notes": "Flagged for annual review. Contact compliance team first."
+    },
+    {
+      "id": "CUST-003",
+      "name": "Carol Vasquez",
+      "email": "carol.vasquez@example.com",
+      "phone": "+1-555-0103",
+      "ssn": "456-78-9012",
+      "address": "221B Baker Street, London, UK SW1A 1AA",
+      "accountBalance": 203800.75,
+      "notes": "International client. Tax treaty applies."
+    },
+    {
+      "id": "CUST-004",
+      "name": "David Chen",
+      "email": "david.chen@example.com",
+      "phone": "+1-555-0104",
+      "ssn": "321-54-9876",
+      "address": "350 Fifth Avenue, New York, NY 10118",
+      "accountBalance": 5600.25,
+      "notes": "New customer onboarded 2026-01-15."
+    },
+    {
+      "id": "CUST-005",
+      "name": "Elena Popov",
+      "email": "elena.popov@example.com",
+      "phone": "+1-555-0105",
+      "ssn": "654-32-1098",
+      "address": "1 Infinite Loop, Cupertino, CA 95014",
+      "accountBalance": 47900.00,
+      "notes": "VIP client. Direct line to relationship manager."
+    }
+  ]
+}
