@@ -1165,6 +1165,7 @@
     <span class="badge-playground">Core Demo</span>
   </a>
   <div class="nav-actions">
+    <a href="./demo.html?autoplay=1" class="btn-ghost">Autoplay Reel ↗</a>
     <a href="https://github.com/Odingard/cerberus-core" target="_blank" class="btn-ghost">GitHub ↗</a>
     <a href="https://grafana.cerberus.sixsenseenterprise.com/d/cerberus-main/cerberus-e28094-ai-security-monitor?orgId=1&refresh=10s" target="_blank" class="btn-ghost" id="nav-dashboard-link">Live Dashboard ↗</a>
   </div>
@@ -1211,6 +1212,15 @@
       </div>
     </div>
     <div id="scenario-desc" class="scenario-desc">Select a scenario to begin.</div>
+    <div id="autoplay-banner" class="quickstart-bar" style="display:none;border-bottom:1px solid var(--border);">
+      <div class="quickstart-copy">
+        <div class="quickstart-label">Autoplay Showcase</div>
+        <div class="quickstart-text">This self-running reel cycles through the clean baseline and the strongest protected attack paths for recording and social sharing.</div>
+      </div>
+      <div class="quickstart-actions">
+        <a href="./demo.html" class="btn-ghost quickstart-btn">Exit Reel</a>
+      </div>
+    </div>
     <div class="quickstart-bar">
       <div class="quickstart-copy">
         <div class="quickstart-label">Run The Proof</div>
@@ -1513,6 +1523,10 @@
   let running = false;
   let runCount = 0;
   let injectionTurnIndex = -1;
+  const autoplayParams = new URLSearchParams(window.location.search);
+  const autoplayMode = autoplayParams.get('autoplay') === '1';
+  const autoplayLoop = autoplayParams.get('loop') !== '0';
+  const autoplaySequence = ['clean-run', 'lethal-trifecta', 'banking-wire-fraud', 'multi-turn-persistent'];
 
   // Session tally — persists across all runs in this browser session
   const sessionTally = { runs: 0, blocked: 0, records: 0 };
@@ -1999,6 +2013,7 @@
   const btnReset      = document.getElementById('btn-reset');
   const btnControl    = document.getElementById('btn-control');
   const btnAttack     = document.getElementById('btn-attack');
+  const autoplayBanner = document.getElementById('autoplay-banner');
   const stepsEl       = document.getElementById('steps');
   const descEl        = document.getElementById('scenario-desc');
   const runBanner     = document.getElementById('run-banner');
@@ -2178,6 +2193,45 @@
 
   function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function waitForRunCompletion(timeoutMs = 60000) {
+    const start = Date.now();
+    let started = false;
+
+    while (Date.now() - start < timeoutMs) {
+      if (running) started = true;
+      if (started && !running) return;
+      await wait(100);
+    }
+
+    throw new Error('Autoplay timed out while waiting for scenario completion.');
+  }
+
+  async function autoplayProofReel() {
+    if (!autoplayMode) return;
+
+    autoplayBanner.style.display = 'flex';
+    setStatus('Autoplay showcase active', false);
+
+    do {
+      reset();
+      btnRun.disabled = true;
+      btnReset.disabled = true;
+      btnControl.disabled = true;
+      btnAttack.disabled = true;
+
+      for (const scenarioId of autoplaySequence) {
+        select.value = scenarioId;
+        onScenarioChange();
+        await wait(700);
+        btnRun.click();
+        await waitForRunCompletion();
+        await wait(2200);
+      }
+
+      await wait(1800);
+    } while (autoplayLoop);
   }
 
   async function runLocalScenario(scenarioId) {
@@ -2428,6 +2482,13 @@
 
   // ── Init ───────────────────────────────────────────────────────────────────────
   await loadScenarios();
+  autoplayProofReel().catch(() => {
+    setStatus('Autoplay error — refresh and try again.', false);
+    btnRun.disabled = false;
+    btnReset.disabled = false;
+    btnControl.disabled = false;
+    btnAttack.disabled = false;
+  });
 </script>
 
 <script>
