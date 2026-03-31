@@ -17,12 +17,11 @@ product claims should always be tied to a specific evidence set and run date.
 
 ---
 
-## What's New in 1.1.2
+## What's New in 1.1.3
 
-- **Release-surface alignment** — package docs now match the current Cerberus product boundary and evidence framing more closely
-- **Current evidence guidance** — benchmark language now explicitly distinguishes historical March 2026 evidence from fresh current-branch reruns
-- **Core-first packaging language** — the Python SDK is described as part of the Cerberus Core layer, separate from Gateway, Intelligence, and Enterprise / Control Plane
-- **No API changes** — this patch release is for packaging and release-surface consistency
+- **Repo-source cutover** — package metadata and docs now point to `cerberus-core` as the canonical public source for Cerberus Core
+- **Public Core alignment** — the Python package surface now matches the new public Core repo boundary
+- **No API changes** — this patch release is for repo, package, and publishing cutover consistency
 
 ---
 

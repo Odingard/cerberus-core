@@ -38,7 +38,7 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 from cerberus_ai.inspector import CerberusInspector
 from cerberus_ai.models import (
