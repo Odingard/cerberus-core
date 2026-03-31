@@ -18,6 +18,10 @@ npm install @cerberus-ai/core
 pip install cerberus-ai
 ```
 
+## Documentation
+
+- [Getting Started](docs/getting-started.md)
+
 ## TypeScript Quickstart
 
 ```ts
