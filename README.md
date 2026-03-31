@@ -61,13 +61,13 @@ cerberus = Cerberus(CerberusConfig(
 - TypeScript SDK in `src/`
 - Python SDK in `sdk/python/`
 - test suites in `tests/`
-- selected examples in `examples/`
+- minimal examples in `examples/`
 
 ## What Core Does Not Include
 
 This repository is intentionally limited to the public Core SDK surface.
 
-Enterprise gateway, monitoring, commercial deployment tooling, hosted product operations, and licensing infrastructure belong in separate private product infrastructure.
+Enterprise gateway, monitoring, commercial deployment tooling, hosted product operations, deep validation trace corpora, and licensing infrastructure belong in separate private product infrastructure.
 
 ## License
 
