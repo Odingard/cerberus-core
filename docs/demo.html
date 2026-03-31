@@ -1153,20 +1153,21 @@
     <div id="scenario-desc" class="scenario-desc">Select a scenario to begin.</div>
     <div class="quickstart-bar">
       <div class="quickstart-copy">
-        <div class="quickstart-label">Core Proof Path</div>
-        <div class="quickstart-text">Run the clean control first, then the Lethal Trifecta attack Cerberus is built to stop.</div>
+        <div class="quickstart-label">Run The Proof</div>
+        <div class="quickstart-text">1. Run the clean control. 2. Run the protected attack. 3. Install Core and wrap the guarded outbound tool.</div>
       </div>
       <div class="quickstart-actions">
-        <button id="btn-control" class="btn-ghost quickstart-btn" disabled>Run Control</button>
-        <button id="btn-attack" class="btn-ghost quickstart-btn" disabled>Run Protected Attack</button>
+        <button id="btn-control" class="btn-ghost quickstart-btn" disabled>1. Run Control</button>
+        <button id="btn-attack" class="btn-ghost quickstart-btn" disabled>2. Run Protected Attack</button>
+        <a href="./getting-started.md" class="btn-ghost quickstart-btn">3. Install Core</a>
       </div>
     </div>
     <div id="run-banner" class="run-banner"></div>
     <div id="steps" class="steps-container">
       <div class="steps-empty">
         <div class="hint">⚡</div>
-        <div>Start with <strong>Run Control</strong>, then <strong>Run Protected Attack</strong></div>
-        <div style="font-size:12px;margin-top:4px">Watch the same runtime path move from normal behavior to an interrupted outbound attack</div>
+        <div>Start with <strong>1. Run Control</strong>, then <strong>2. Run Protected Attack</strong></div>
+        <div style="font-size:12px;margin-top:4px">Watch the same runtime path move from normal behavior to a blocked outbound attack, then install Core from the docs.</div>
       </div>
     </div>
   </div>
@@ -1221,20 +1222,20 @@
         <div class="proof-path">
           <div class="proof-path-header">
             <span class="proof-path-title">Demo Progress</span>
-            <span class="proof-path-status" id="proof-path-status">Start with the clean control.</span>
+            <span class="proof-path-status" id="proof-path-status">Start with 1. Run Control.</span>
           </div>
           <div class="proof-steps">
             <div class="proof-step" id="proof-step-control">
               <span class="proof-step-dot">1</span>
               <div class="proof-step-copy">
-                <span class="proof-step-label">Run Control</span>
+                <span class="proof-step-label">1. Run Control</span>
                 <span class="proof-step-text">Show a normal trusted-data workflow that completes without a block.</span>
               </div>
             </div>
             <div class="proof-step" id="proof-step-attack">
               <span class="proof-step-dot">2</span>
               <div class="proof-step-copy">
-                <span class="proof-step-label">Run Protected Attack</span>
+                <span class="proof-step-label">2. Run Protected Attack</span>
                 <span class="proof-step-text">Replay the lethal runtime path and watch Cerberus interrupt the outbound action.</span>
               </div>
             </div>
@@ -1704,7 +1705,7 @@
     }
 
     if (!proofProgress.controlCompleted) {
-      proofPathStatus.textContent = 'Start with the clean control.';
+      proofPathStatus.textContent = 'Start with 1. Run Control.';
     } else if (!proofProgress.attackCompleted) {
       proofPathStatus.textContent = 'Baseline established. Run the protected attack next.';
     } else {
@@ -1866,8 +1867,8 @@
     stepsEl.innerHTML = `
       <div class="steps-empty">
         <div class="hint">⚡</div>
-        <div>Start with <strong>Run Control</strong>, then <strong>Run Protected Attack</strong></div>
-        <div style="font-size:12px;margin-top:4px">Watch the same runtime path move from normal behavior to an interrupted outbound attack</div>
+        <div>Start with <strong>1. Run Control</strong>, then <strong>2. Run Protected Attack</strong></div>
+        <div style="font-size:12px;margin-top:4px">Watch the same runtime path move from normal behavior to a blocked outbound attack, then install Core from the docs.</div>
       </div>`;
     runBanner.className = 'run-banner';
     updateScore(0);
