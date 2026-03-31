@@ -214,6 +214,7 @@ export function detectSplitExfiltration(
   let clusteredDestination = '';
   let clusteredDestinationCallCount = 0;
   let clusteredMatchedFields: readonly string[] = [];
+  let fragmentReassemblyDetected = false;
 
   const recordsByDestination = new Map<string, OutboundCallRecord[]>();
   for (const record of unauthorizedRecords) {
@@ -237,9 +238,23 @@ export function detectSplitExfiltration(
         : computeSimilarityScore(combinedText, session.privilegedValues);
 
     if (similarity.matchedFields.length > 0) {
+      const individualMatches = new Set<string>();
+      for (const record of records) {
+        const recordSimilarity =
+          session.sensitiveEntities.length > 0
+            ? computeEntitySimilarityScore(record.text, session.sensitiveEntities)
+            : computeSimilarityScore(record.text, session.privilegedValues);
+        for (const field of recordSimilarity.matchedFields) {
+          individualMatches.add(field);
+        }
+      }
+
       clusteredDestination = destination;
       clusteredDestinationCallCount = records.length;
       clusteredMatchedFields = similarity.matchedFields;
+      fragmentReassemblyDetected = similarity.matchedFields.some(
+        (field) => !individualMatches.has(field),
+      );
       break;
     }
   }
@@ -263,6 +278,7 @@ export function detectSplitExfiltration(
     ...(clusteredMatchedFields.length > 0 ? { matchedFields: clusteredMatchedFields } : {}),
     ...(sequentialDetected ? { sequentialPattern: true as const } : {}),
     ...(destinationClusterDetected ? { destinationCluster: true as const } : {}),
+    ...(fragmentReassemblyDetected ? { fragmentReassembly: true as const } : {}),
     timestamp: ctx.timestamp,
   };
 }

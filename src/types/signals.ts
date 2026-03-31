@@ -219,6 +219,7 @@ export interface SplitExfiltrationSignal {
   readonly matchedFields?: readonly string[];
   readonly sequentialPattern?: true;
   readonly destinationCluster?: true;
+  readonly fragmentReassembly?: true;
   readonly timestamp: number;
 }
 

