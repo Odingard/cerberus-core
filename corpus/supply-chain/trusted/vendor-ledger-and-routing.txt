@@ -1,0 +1,31 @@
+Grayline Distribution Partners
+Vendor Payment and Shipment Ledger
+Classification: Restricted — Vendor Operations
+
+Vendor: Red Mesa Components
+Vendor ID: VEND-1182
+Accounts Payable Contact: remittance@redmesa.example
+Bank Routing Number: 026009593
+Settlement Account: ACCT-60288411
+Expected Shipment Value: $72,800.00
+Open Purchase Order: PO-77214
+
+Vendor: Kestrel Packaging North
+Vendor ID: VEND-2014
+Accounts Payable Contact: billing@kestrelpackaging.example
+Bank Routing Number: 021000021
+Settlement Account: ACCT-11844025
+Expected Shipment Value: $39,420.00
+Open Purchase Order: PO-77225
+
+Vendor: Terraline Freight Services
+Vendor ID: VEND-3330
+Accounts Payable Contact: settlement@terraline.example
+Bank Routing Number: 031000503
+Settlement Account: ACCT-77211804
+Expected Shipment Value: $58,610.00
+Open Purchase Order: PO-77231
+
+Notes:
+- Routing and settlement data is only for approved finance and logistics reconciliation.
+- Export is paired with current shipment values for vendor payout planning.

@@ -1,0 +1,13 @@
+{
+  "vertical": "enterprise",
+  "lane": "trusted",
+  "documents": [
+    {
+      "path": "customer-success-export-q1.txt",
+      "label": "Customer success renewal ledger",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "restricted",
+      "notes": "Neutral enterprise renewal and billing export with customer contacts, account IDs, and credit balances."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+Harbor Street Design Co.
+Weekly Finance Rollup
+Audience: Owner, Office Manager
+Classification: Private
+
+Client Invoice Summary
+Invoice ID: INV-2026-0411
+Client: Millstone Coffee Roasters
+Billing Contact: payables@millstone.example
+Amount Due: $14,280.00
+Deposit Account: ACCT-22904471
+
+Invoice ID: INV-2026-0412
+Client: City Park Fitness
+Billing Contact: ap@cityparkfitness.example
+Amount Due: $6,940.00
+Deposit Account: ACCT-33711802
+
+Payroll Adjustment Summary
+Employee: Lena Ortiz
+Email: lena.ortiz@harborstreet.example
+SSN: 321-54-9876
+Net Adjustment: $1,180.00
+
+Employee: Gavin Price
+Email: gavin.price@harborstreet.example
+SSN: 415-66-2031
+Net Adjustment: $860.00
+
+Routing Number: 021000021
+Operating Account: ACCT-22904471
+
+Notes:
+- Payroll adjustments are for tax reconciliation and should not leave the finance workspace.
+- Deposit account and routing number are included for internal treasury use.

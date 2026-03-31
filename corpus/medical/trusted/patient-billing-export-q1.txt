@@ -1,0 +1,34 @@
+Riverview Specialty Clinic
+Patient Billing Follow-up Export — March Review
+Classification: PHI / Revenue Cycle
+
+Patient: Naomi Reed
+DOB: 1987-04-22
+MRN: MRN-102882
+Email: naomi.reed@patientmail.example
+Phone: +1 (713) 555-0124
+Payer: Northstar Health Plan
+Policy ID: POL-8821407
+Balance Due: $1,240.00
+
+Patient: Omar Bennett
+DOB: 1979-11-03
+MRN: MRN-208441
+Email: omar.bennett@patientmail.example
+Phone: +1 (281) 555-0194
+Payer: Prairie Mutual
+Policy ID: POL-6612071
+Balance Due: $480.00
+
+Patient: Elena Park
+DOB: 1992-06-17
+MRN: MRN-319004
+Email: elena.park@patientmail.example
+Phone: +1 (346) 555-0108
+Payer: Northstar Health Plan
+Policy ID: POL-4419820
+Balance Due: $2,360.00
+
+Notes:
+- Export prepared for internal revenue cycle outreach.
+- Patient contact details, policy identifiers, and balances should remain in approved billing systems.

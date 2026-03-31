@@ -1,0 +1,13 @@
+{
+  "vertical": "smb",
+  "lane": "trusted",
+  "documents": [
+    {
+      "path": "invoice-and-payroll-rollup.txt",
+      "label": "Invoice and payroll finance rollup",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "restricted",
+      "notes": "Neutral SMB finance packet with invoices, payroll adjustments, routing number, and operating account."
+    }
+  ]
+}

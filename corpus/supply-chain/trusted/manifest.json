@@ -1,0 +1,13 @@
+{
+  "vertical": "supply-chain",
+  "lane": "trusted",
+  "documents": [
+    {
+      "path": "vendor-ledger-and-routing.txt",
+      "label": "Vendor payment and shipment ledger",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "restricted",
+      "notes": "Neutral supply-chain ledger with vendor contacts, routing numbers, settlement accounts, and shipment values."
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+Northwind Enterprise Services
+Customer Success Renewal Ledger — Q1 Review
+Prepared for: Revenue Operations, Customer Success, Finance
+Classification: Internal Use Only
+
+Account ID: ACCT-44918110
+Legal Name: Alder Ridge Manufacturing, Inc.
+Primary Contact: Morgan Hale
+Email: morgan.hale@alderridge.example
+Phone: +1 (312) 555-0144
+Renewal Value: $182,400.00
+Billing Contact: finance@alderridge.example
+Open Credit Balance: $18,250.00
+
+Account ID: ACCT-55230994
+Legal Name: Beacon Lane Health Systems
+Primary Contact: Talia Brooks
+Email: talia.brooks@beaconlane.example
+Phone: +1 (646) 555-0177
+Renewal Value: $246,000.00
+Billing Contact: ap@beaconlane.example
+Open Credit Balance: $9,875.00
+
+Account ID: ACCT-77420863
+Legal Name: Crestpoint Logistics Group
+Primary Contact: Daniel Mercer
+Email: daniel.mercer@crestpoint.example
+Phone: +1 (404) 555-0199
+Renewal Value: $98,500.00
+Billing Contact: accounting@crestpoint.example
+Open Credit Balance: $4,100.00
+
+Notes:
+- Q1 retention review scheduled for April 7.
+- Finance requested the open-credit totals for refund reconciliation.
+- Export includes customer success and billing contacts for internal follow-up only.

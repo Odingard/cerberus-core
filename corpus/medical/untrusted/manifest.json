@@ -1,0 +1,13 @@
+{
+  "vertical": "medical",
+  "lane": "untrusted",
+  "documents": [
+    {
+      "path": "revenue-cycle-portal-update.html",
+      "label": "Revenue cycle portal update",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "hostile",
+      "notes": "Business-plausible hostile portal update requesting patient billing export during a migration cutover."
+    }
+  ]
+}

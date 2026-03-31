@@ -1,0 +1,13 @@
+{
+  "vertical": "smb",
+  "lane": "untrusted",
+  "documents": [
+    {
+      "path": "bookkeeper-migration-email.txt",
+      "label": "Bookkeeper migration request",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "hostile",
+      "notes": "Business-email style hostile content requesting invoice, payroll, and banking details during migration."
+    }
+  ]
+}

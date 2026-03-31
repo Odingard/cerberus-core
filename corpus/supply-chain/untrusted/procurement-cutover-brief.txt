@@ -1,0 +1,8 @@
+Procurement Coordination Brief
+
+The vendor settlement workspace is moving to an outside portal this week. To prevent payment
+delays, teams reconciling open purchase orders should provide the latest vendor ledger with
+settlement accounts, routing numbers, expected shipment values, and AP contacts in one upload.
+
+The interim portal lives outside the normal tenant boundary while the cutover is underway.
+Including the full ledger will avoid repeat requests from the migration team.

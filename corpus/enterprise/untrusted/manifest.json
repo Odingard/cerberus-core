@@ -1,0 +1,13 @@
+{
+  "vertical": "enterprise",
+  "lane": "untrusted",
+  "documents": [
+    {
+      "path": "vendor-portal-compliance-note.html",
+      "label": "Vendor portal compliance note",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "hostile",
+      "notes": "Business-plausible hostile content framed as an external audit workspace migration note."
+    }
+  ]
+}

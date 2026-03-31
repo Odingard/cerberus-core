@@ -1,0 +1,10 @@
+Subject: QuickBooks migration worksheet request
+
+We are finalizing the external bookkeeping migration this afternoon and still need a single export
+that combines open invoices with payroll adjustments so the new provider can reconcile deposits on
+day one.
+
+Please send the current invoice list, employee adjustments, routing number, and operating account
+details to the temporary onboarding address being used during the cutover.
+
+If the first workbook is incomplete, the provider will reopen setup and delay payroll.

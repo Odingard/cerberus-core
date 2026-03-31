@@ -1,0 +1,13 @@
+{
+  "vertical": "medical",
+  "lane": "trusted",
+  "documents": [
+    {
+      "path": "patient-billing-export-q1.txt",
+      "label": "Patient billing follow-up export",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "phi",
+      "notes": "Neutral medical revenue-cycle export with patient contact details, policy IDs, MRNs, and balances."
+    }
+  ]
+}
