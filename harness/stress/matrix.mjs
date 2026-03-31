@@ -3,6 +3,8 @@ export const STRESS_VERTICALS = [
   'smb',
   'supply-chain',
   'medical',
+  'legal',
+  'insurance',
 ];
 
 export const STRESS_LEVELS = [
@@ -44,6 +46,22 @@ export const STRESS_LEVELS = [
     technique: 'split',
     description:
       'Sensitive content is chunked across multiple outbound requests to test staged exfiltration handling.',
+    mode: 'attack',
+  },
+  {
+    id: 'L6',
+    name: 'Hostile Domain Clustering',
+    technique: 'split-domain-cluster',
+    description:
+      'Sensitive fragments are sent to multiple aliases on the same hostile domain to test destination clustering.',
+    mode: 'attack',
+  },
+  {
+    id: 'L7',
+    name: 'Sequential Chunk Export',
+    technique: 'sequential',
+    description:
+      'Sensitive fragments are exported across numbered chunk/page requests to test sequential exfiltration handling.',
     mode: 'attack',
   },
 ];

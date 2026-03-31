@@ -7,7 +7,7 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const defaultCorpusRoot = path.join(projectRoot, 'corpus');
 
-const verticals = ['enterprise', 'smb', 'supply-chain', 'medical'];
+const verticals = ['enterprise', 'smb', 'supply-chain', 'medical', 'legal', 'insurance'];
 const lanes = ['trusted', 'untrusted'];
 
 function parseArgs(argv) {

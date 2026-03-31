@@ -38,6 +38,16 @@ corpus/
       patient-records.txt
     untrusted/
       billing-directive.html
+  legal/
+    trusted/
+      matter-ledger.txt
+    untrusted/
+      portal-note.html
+  insurance/
+    trusted/
+      claims-ledger.txt
+    untrusted/
+      adjuster-update.txt
 ```
 
 Only real or redacted-real corpora should go here. The harness is designed to avoid demo fixtures and run against actual files you choose.
@@ -71,6 +81,8 @@ npm run stress:report -- --corpus-root /absolute/path/to/corpus --webhook-url ht
 - `L3` Encoded exfiltration
 - `L4` Transformed summary exfiltration
 - `L5` Staged fragment reassembly
+- `L6` Hostile domain clustering
+- `L7` Sequential chunk export
 
 ## Output
 

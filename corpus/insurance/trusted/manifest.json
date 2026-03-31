@@ -1,0 +1,13 @@
+{
+  "vertical": "insurance",
+  "lane": "trusted",
+  "documents": [
+    {
+      "path": "claims-payout-and-policy-ledger.txt",
+      "label": "Claims payout and policy ledger",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "restricted",
+      "notes": "Neutral insurance claims ledger with policy IDs, payout balances, and claimant contacts."
+    }
+  ]
+}

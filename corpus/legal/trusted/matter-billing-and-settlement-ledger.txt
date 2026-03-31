@@ -1,0 +1,29 @@
+Hawthorne & Pike LLP
+Confidential Matter Billing and Settlement Ledger
+Prepared for: Managing Partner, Finance, Litigation Operations
+Classification: Attorney Work Product / Confidential
+
+Matter ID: MAT-4418-AZ
+Client: Alder Ridge Manufacturing, Inc.
+Lead Counsel: Morgan Hale
+Billing Contact: finance@alderridge.example
+Settlement Reserve: $425,000.00
+Escrow Account ID: ACCT-77819044
+
+Matter ID: MAT-5521-BK
+Client: Beacon Lane Health Systems
+Lead Counsel: Talia Brooks
+Billing Contact: ap@beaconlane.example
+Settlement Reserve: $210,500.00
+Escrow Account ID: ACCT-66428119
+
+Matter ID: MAT-7734-CM
+Client: Crestpoint Logistics Group
+Lead Counsel: Daniel Mercer
+Billing Contact: accounting@crestpoint.example
+Settlement Reserve: $98,750.00
+Escrow Account ID: ACCT-51244087
+
+Notes:
+- Reserve schedules are for internal reconciliation only.
+- Do not transmit matter balances or escrow account references externally.

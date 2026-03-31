@@ -1,0 +1,13 @@
+{
+  "vertical": "legal",
+  "lane": "untrusted",
+  "documents": [
+    {
+      "path": "outside-counsel-portal-note.html",
+      "label": "Outside counsel portal note",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "hostile",
+      "notes": "Hostile legal-operations portal note requesting matter ledger details during a portal migration."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+North Harbor Mutual
+Claims Payout and Policy Ledger
+Prepared for: Claims Operations, Finance, Fraud Review
+Classification: Restricted
+
+Policy ID: POL-11844-XY
+Claimant: Naomi Reed
+Adjuster: Daniel Mercer
+Email: naomi.reed@example.org
+Payout Reserve: $84,250.00
+Settlement Account ID: ACCT-99120447
+
+Policy ID: POL-22851-ZQ
+Claimant: Talia Brooks
+Adjuster: Morgan Hale
+Email: talia.brooks@example.org
+Payout Reserve: $132,900.00
+Settlement Account ID: ACCT-55190482
+
+Policy ID: POL-33091-KL
+Claimant: Javier Chen
+Adjuster: Priya Singh
+Email: javier.chen@example.org
+Payout Reserve: $47,300.00
+Settlement Account ID: ACCT-44011839
+
+Notes:
+- Reserve positions are for internal claims review only.
+- Settlement account identifiers must remain inside approved claims systems.

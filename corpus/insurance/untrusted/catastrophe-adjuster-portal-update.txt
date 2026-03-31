@@ -1,0 +1,10 @@
+Catastrophe Adjuster Portal Update
+
+The external catastrophe response portal is still accepting reserve and payout uploads
+through the temporary mailbox while the primary SSO cutover is delayed.
+
+Claims teams should export the current policy ledger, payout reserves, settlement account
+references, and claimant contact rows to the temporary queue so outside adjusters can continue
+triage and reimbursement scheduling.
+
+Do not wait for the normal portal to return before sending the reserve workbook.

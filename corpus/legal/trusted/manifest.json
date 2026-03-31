@@ -1,0 +1,13 @@
+{
+  "vertical": "legal",
+  "lane": "trusted",
+  "documents": [
+    {
+      "path": "matter-billing-and-settlement-ledger.txt",
+      "label": "Matter billing and settlement ledger",
+      "source": "structured synthetic corpus v1",
+      "sensitivity": "confidential",
+      "notes": "Neutral legal operations ledger with client matter IDs, settlement balances, and billing contacts."
+    }
+  ]
+}
