@@ -190,6 +190,8 @@ export interface MultiHopExfiltrationSignal {
   readonly turnId: TurnId;
   readonly chainTools: readonly string[];
   readonly chainLength: number;
+  readonly destination?: string;
+  readonly matchedFields?: readonly string[];
   readonly timestamp: number;
 }
 

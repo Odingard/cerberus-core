@@ -222,7 +222,12 @@ export function interceptToolCall(
         recordSignal(session, correlatedOutboundSignal);
       }
 
-      const toolChainSignal = detectToolChainExfiltration(ctx, session, outboundTools);
+      const toolChainSignal = detectToolChainExfiltration(
+        ctx,
+        session,
+        outboundTools,
+        config.authorizedDestinations,
+      );
       if (toolChainSignal) {
         signals.push(toolChainSignal);
         recordSignal(session, toolChainSignal);
@@ -419,7 +424,12 @@ export function interceptToolCall(
     }
 
     // L3 sub-classifier: Multi-hop tool chain exfiltration detector
-    const toolChainSignal = detectToolChainExfiltration(ctx, session, outboundTools);
+    const toolChainSignal = detectToolChainExfiltration(
+      ctx,
+      session,
+      outboundTools,
+      config.authorizedDestinations,
+    );
     if (toolChainSignal) {
       signals.push(toolChainSignal);
       recordSignal(session, toolChainSignal);
