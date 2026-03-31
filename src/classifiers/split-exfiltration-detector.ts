@@ -17,7 +17,13 @@
 import type { SplitExfiltrationSignal } from '../types/signals.js';
 import type { ToolCallContext } from '../types/context.js';
 import type { DetectionSession } from '../engine/session.js';
-import { serializeArguments } from '../layers/l3-classifier.js';
+import {
+  computeEntitySimilarityScore,
+  computeSimilarityScore,
+  extractDestination,
+  isAuthorizedDestination,
+  serializeArguments,
+} from '../layers/l3-classifier.js';
 
 /** Default threshold in bytes for cumulative outbound volume. */
 const DEFAULT_SPLIT_EXFIL_THRESHOLD_BYTES = 10240;
@@ -45,6 +51,8 @@ interface OutboundCallRecord {
   readonly byteSize: number;
   readonly numericArgs: readonly number[];
   readonly turnId: string;
+  readonly destination: string;
+  readonly text: string;
 }
 
 /**
@@ -120,6 +128,7 @@ export function detectSplitExfiltration(
   session: DetectionSession,
   outboundTools: readonly string[],
   thresholdBytes?: number,
+  authorizedDestinations?: readonly string[],
 ): SplitExfiltrationSignal | null {
   // Gate: only runs for outbound tools
   if (!outboundTools.includes(ctx.toolName)) {
@@ -127,11 +136,12 @@ export function detectSplitExfiltration(
   }
 
   // Gate: L1 must have been active (privileged data in session)
-  if (session.privilegedValues.size === 0) {
+  if (session.privilegedValues.size === 0 && session.sensitiveEntities.length === 0) {
     return null;
   }
 
   const threshold = thresholdBytes ?? DEFAULT_SPLIT_EXFIL_THRESHOLD_BYTES;
+  const allowedDestinations = authorizedDestinations ?? [];
 
   // Count prior outbound calls from history and compute cumulative volume
   let outboundCallCount = 0;
@@ -145,12 +155,16 @@ export function detectSplitExfiltration(
     // Look up the stored outbound bytes for this turn
     const turnBytes = session.outboundBytesByTurn?.get(entry.turnId) ?? 0;
     const turnNumerics = session.outboundNumericArgsByTurn?.get(entry.turnId) ?? [];
+    const turnDestination = session.outboundDestinationByTurn?.get(entry.turnId) ?? '';
+    const turnText = session.outboundTextByTurn?.get(entry.turnId) ?? '';
     cumulativeBytes += turnBytes;
     outboundRecords.push({
       toolName: entry.toolName,
       byteSize: turnBytes,
       numericArgs: turnNumerics,
       turnId: entry.turnId,
+      destination: turnDestination,
+      text: turnText,
     });
   }
 
@@ -158,6 +172,7 @@ export function detectSplitExfiltration(
   const currentArgText = serializeArguments(ctx.toolArguments);
   const currentBytes = Buffer.byteLength(currentArgText, 'utf-8');
   const currentNumerics = extractSequentialIndicators(ctx.toolArguments);
+  const currentDestination = extractDestination(ctx.toolArguments);
   cumulativeBytes += currentBytes;
   outboundCallCount += 1;
 
@@ -166,6 +181,8 @@ export function detectSplitExfiltration(
     byteSize: currentBytes,
     numericArgs: currentNumerics,
     turnId: ctx.turnId,
+    destination: currentDestination,
+    text: currentArgText,
   });
 
   // Store current call's outbound data for future turns
@@ -175,6 +192,16 @@ export function detectSplitExfiltration(
   if (session.outboundNumericArgsByTurn && currentNumerics.length > 0) {
     session.outboundNumericArgsByTurn.set(ctx.turnId, currentNumerics);
   }
+  if (session.outboundTextByTurn) {
+    session.outboundTextByTurn.set(ctx.turnId, currentArgText);
+  }
+  if (session.outboundDestinationByTurn) {
+    session.outboundDestinationByTurn.set(ctx.turnId, currentDestination);
+  }
+
+  const unauthorizedRecords = outboundRecords.filter(
+    (record) => !isAuthorizedDestination(record.destination, allowedDestinations),
+  );
 
   // Detection path 1: volume + frequency threshold
   const volumeExceeded = cumulativeBytes >= threshold && outboundCallCount >= MIN_OUTBOUND_CALLS;
@@ -182,7 +209,42 @@ export function detectSplitExfiltration(
   // Detection path 2: sequential data patterns (lower threshold)
   const sequentialDetected = outboundCallCount >= 2 && hasSequentialPattern(outboundRecords);
 
-  if (!volumeExceeded && !sequentialDetected) {
+  // Detection path 3: repeated unauthorized destination with cumulatively matched sensitive data.
+  let clusteredDestination = '';
+  let clusteredDestinationCallCount = 0;
+  let clusteredMatchedFields: readonly string[] = [];
+
+  const recordsByDestination = new Map<string, OutboundCallRecord[]>();
+  for (const record of unauthorizedRecords) {
+    if (!record.destination) continue;
+    const existing = recordsByDestination.get(record.destination);
+    if (existing) {
+      existing.push(record);
+    } else {
+      recordsByDestination.set(record.destination, [record]);
+    }
+  }
+
+  for (const [destination, records] of recordsByDestination.entries()) {
+    if (records.length < 2) continue;
+
+    const combinedText = records.map((record) => record.text).join('\n');
+    const similarity =
+      session.sensitiveEntities.length > 0
+        ? computeEntitySimilarityScore(combinedText, session.sensitiveEntities)
+        : computeSimilarityScore(combinedText, session.privilegedValues);
+
+    if (similarity.matchedFields.length > 0) {
+      clusteredDestination = destination;
+      clusteredDestinationCallCount = records.length;
+      clusteredMatchedFields = similarity.matchedFields;
+      break;
+    }
+  }
+
+  const destinationClusterDetected = clusteredDestinationCallCount >= 2;
+
+  if (!volumeExceeded && !sequentialDetected && !destinationClusterDetected) {
     return null;
   }
 
@@ -192,7 +254,13 @@ export function detectSplitExfiltration(
     turnId: ctx.turnId,
     outboundCallCount,
     cumulativeBytes,
+    ...(clusteredDestination ? { destination: clusteredDestination } : {}),
+    ...(clusteredDestinationCallCount > 0
+      ? { destinationCallCount: clusteredDestinationCallCount }
+      : {}),
+    ...(clusteredMatchedFields.length > 0 ? { matchedFields: clusteredMatchedFields } : {}),
     ...(sequentialDetected ? { sequentialPattern: true as const } : {}),
+    ...(destinationClusterDetected ? { destinationCluster: true as const } : {}),
     timestamp: ctx.timestamp,
   };
 }

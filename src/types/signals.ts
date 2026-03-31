@@ -212,7 +212,11 @@ export interface SplitExfiltrationSignal {
   readonly turnId: TurnId;
   readonly outboundCallCount: number;
   readonly cumulativeBytes: number;
+  readonly destination?: string;
+  readonly destinationCallCount?: number;
+  readonly matchedFields?: readonly string[];
   readonly sequentialPattern?: true;
+  readonly destinationCluster?: true;
   readonly timestamp: number;
 }
 

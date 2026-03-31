@@ -239,6 +239,7 @@ export function interceptToolCall(
         session,
         outboundTools,
         config.splitExfilThresholdBytes,
+        config.authorizedDestinations,
       );
       if (splitExfilSignal) {
         signals.push(splitExfilSignal);
@@ -437,6 +438,7 @@ export function interceptToolCall(
       session,
       outboundTools,
       config.splitExfilThresholdBytes,
+      config.authorizedDestinations,
     );
     if (splitExfilSignal) {
       signals.push(splitExfilSignal);

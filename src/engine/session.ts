@@ -62,6 +62,12 @@ export interface DetectionSession {
   /** Outbound numeric args per turn for sequential pattern detection. */
   readonly outboundNumericArgsByTurn: Map<string, readonly number[]>;
 
+  /** Serialized outbound argument text per turn for staged/chunked exfil detection. */
+  readonly outboundTextByTurn: Map<string, string>;
+
+  /** Extracted outbound destination per turn for destination clustering. */
+  readonly outboundDestinationByTurn: Map<string, string>;
+
   /** Registered tools with their schema fingerprints (for dynamic tool registration). */
   readonly registeredTools: Map<string, RegisteredToolEntry>;
 
@@ -111,6 +117,8 @@ export function createSession(sessionId?: string): DetectionSession {
     toolCallHistory: [],
     outboundBytesByTurn: new Map(),
     outboundNumericArgsByTurn: new Map(),
+    outboundTextByTurn: new Map(),
+    outboundDestinationByTurn: new Map(),
     registeredTools: new Map(),
     toolRegistrationAudit: [],
   };
@@ -142,6 +150,8 @@ export function resetSession(session: DetectionSession): void {
   session.toolCallHistory.length = 0;
   session.outboundBytesByTurn.clear();
   session.outboundNumericArgsByTurn.clear();
+  session.outboundTextByTurn.clear();
+  session.outboundDestinationByTurn.clear();
   session.registeredTools.clear();
   session.toolRegistrationAudit.length = 0;
   delete session.delegationGraph;
