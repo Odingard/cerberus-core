@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "refresh:coverage": "vitest run --coverage",
     "test:report": "mkdir -p test-results && vitest run --reporter=json --outputFile=test-results/vitest-report.json && node scripts/render-test-report.mjs",
     "harness:action": "npm run build && node harness/action/runner.mjs",
     "harness:action:report": "npm run harness:action && node scripts/render-action-harness-report.mjs",

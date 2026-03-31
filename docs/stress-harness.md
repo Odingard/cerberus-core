@@ -97,3 +97,15 @@ npm run stress:report -- --validation-sequence repeat-pack-01 --repeats 3 --corp
 
 The HTML report is meant to be operator-legible for customer briefings and analyst reviews.
 It now includes per-level rates and scenario stability when `--repeats` is greater than `1`.
+
+## Refresh coverage
+
+To refresh the HTML coverage dashboard after code changes:
+
+```bash
+npm run refresh:coverage
+```
+
+Coverage HTML:
+
+- `coverage/lcov-report/index.html`
