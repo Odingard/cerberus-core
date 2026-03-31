@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:report": "mkdir -p test-results && vitest run --reporter=json --outputFile=test-results/vitest-report.json && node scripts/render-test-report.mjs",
     "lint": "eslint --ext .ts src harness tests",
     "lint:fix": "eslint --ext .ts src harness tests --fix",
     "format": "prettier --write \"src/**/*.ts\" \"harness/**/*.ts\" \"tests/**/*.ts\"",
