@@ -25,6 +25,10 @@ function parseArgs(argv) {
   return args;
 }
 
+function defaultValidationSequence() {
+  return `validation-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+}
+
 function preview(value) {
   const compact = String(value).replace(/\s+/g, ' ').trim();
   return compact.length > 160 ? `${compact.slice(0, 157)}...` : compact;
@@ -450,6 +454,7 @@ async function main() {
   const webhookUrl = args['webhook-url'];
   const corpusRoot =
     args['corpus-root'] ?? path.join(projectRoot, 'corpus');
+  const validationSequence = args['validation-sequence'] ?? defaultValidationSequence();
 
   if (!webhookUrl) {
     console.error('Missing required --webhook-url');
@@ -491,6 +496,7 @@ async function main() {
 
   const report = {
     generatedAt: new Date().toISOString(),
+    validationSequence,
     corpusRoot,
     webhookUrl,
     summary: summarize(results),
@@ -503,6 +509,7 @@ async function main() {
   await writeFile(reportJsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
   console.log('\nStress Harness Summary');
+  console.log(`  Validation sequence: ${validationSequence}`);
   console.log(`  Total scenarios: ${report.summary.total}`);
   console.log(`  Passed: ${report.summary.passed}`);
   console.log(`  Failed: ${report.summary.failed}`);

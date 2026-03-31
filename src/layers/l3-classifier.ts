@@ -31,6 +31,15 @@ const DESTINATION_FIELDS = [
   'bcc',
 ];
 
+const OUTBOUND_CONTENT_FIELDS = [
+  'payload',
+  'body',
+  'content',
+  'data',
+  'message',
+  'text',
+];
+
 /**
  * Classify whether this tool call is an exfiltration attempt.
  * Only runs for tools listed in outboundTools. Checks correlation
@@ -62,7 +71,7 @@ export function classifyOutboundIntent(
     return null;
   }
 
-  const outboundText = serializeArguments(ctx.toolArguments);
+  const outboundText = extractOutboundContent(ctx.toolArguments);
   const { score, matchedFields } =
     session.sensitiveEntities.length > 0
       ? computeEntitySimilarityScore(outboundText, session.sensitiveEntities)
@@ -239,6 +248,16 @@ export function serializeArguments(args: Record<string, unknown>): string {
   const parts: string[] = [];
   collectStrings(args, parts);
   return parts.join(' ');
+}
+
+export function extractOutboundContent(args: Record<string, unknown>): string {
+  for (const field of OUTBOUND_CONTENT_FIELDS) {
+    const value = args[field];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return serializeArguments(args);
 }
 
 /**

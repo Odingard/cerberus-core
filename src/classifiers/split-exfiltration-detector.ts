@@ -21,9 +21,9 @@ import {
   computeEntitySimilarityScore,
   computeSimilarityScore,
   extractDestination,
+  extractOutboundContent,
   isAuthorizedDestination,
   normalizeDestinationForClustering,
-  serializeArguments,
 } from '../layers/l3-classifier.js';
 
 /** Default threshold in bytes for cumulative outbound volume. */
@@ -170,7 +170,7 @@ export function detectSplitExfiltration(
   }
 
   // Add current call
-  const currentArgText = serializeArguments(ctx.toolArguments);
+  const currentArgText = extractOutboundContent(ctx.toolArguments);
   const currentBytes = Buffer.byteLength(currentArgText, 'utf-8');
   const currentNumerics = extractSequentialIndicators(ctx.toolArguments);
   const currentDestination = extractDestination(ctx.toolArguments);

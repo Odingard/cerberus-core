@@ -102,6 +102,10 @@ const html = `<!doctype html>
     <section class="hero">
       <h1>Cerberus Stress Harness</h1>
       <p>Sector + difficulty benchmark using real corpora and real guarded outbound actions. This report shows how Cerberus performs across Enterprise, SMB, Supply Chain, and Medical stress scenarios.</p>
+      <div class="meta">
+        <div><strong>Validation sequence:</strong> ${escapeHtml(report.validationSequence ?? 'untracked')}</div>
+        <div><strong>Generated at:</strong> ${escapeHtml(report.generatedAt)}</div>
+      </div>
       <div class="grid">
         <div class="panel"><div>Total scenarios</div><h2>${report.summary.total}</h2></div>
         <div class="panel"><div>Passed</div><h2>${report.summary.passed}</h2></div>
