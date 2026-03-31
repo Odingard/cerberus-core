@@ -32,8 +32,9 @@ pip install cerberus-ai
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
-- [Live Demo](https://odingard.github.io/cerberus-core/)
+- [Core Live Attack Demo](https://odingard.github.io/cerberus-core/)
 - [Animated Core Demo Source](docs/demo.html)
+- [Demo Surface Strategy](docs/demo-surface-strategy.md)
 
 ## TypeScript Quickstart
 
