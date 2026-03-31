@@ -1,0 +1,96 @@
+{
+  "name": "@cerberus-ai/core",
+  "version": "1.1.0",
+  "description": "Runtime security for AI agent tool execution. Detects, correlates, and interrupts guarded Lethal Trifecta attack paths.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ harness/ tests/",
+    "lint:fix": "eslint src/ harness/ tests/ --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"harness/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"harness/**/*.ts\" \"tests/**/*.ts\"",
+    "ci": "npm run typecheck && npm run lint && npm run test",
+    "bench": "npx tsx harness/bench.ts",
+    "demo:capture": "npx tsx examples/demo-capture.ts",
+    "demo:langchain": "npx tsx examples/langchain-rag-demo.ts",
+    "demo:live": "npx tsx examples/live-attack-demo.ts",
+    "clean": "rm -rf dist",
+    "demo": "cd demo && npx vite",
+    "demo:build": "cd demo && npx vite build",
+    "playground": "npx tsx playground/src/server.ts",
+    "demo:playground": "npx tsx playground/src/server.ts",
+    "demo:preview": "cd demo && npx vite preview",
+    "demo:docker:build": "docker build -t cerberus-demo .",
+    "demo:docker:run": "docker run --rm cerberus-demo",
+    "prebuild": "npm run clean",
+    "prepublishOnly": "npm run ci && npm run build",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "ai-security",
+    "agentic-ai",
+    "prompt-injection",
+    "data-exfiltration",
+    "runtime-security",
+    "llm-security",
+    "cerberus"
+  ],
+  "author": "Six Sense Enterprise Services",
+  "license": "MIT",
+  "homepage": "https://github.com/Odingard/cerberus-core",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Odingard/cerberus-core"
+  },
+  "bugs": {
+    "url": "https://github.com/Odingard/cerberus-core/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/generative-ai": "^0.24.1",
+    "@langchain/core": "^1.1.30",
+    "@langchain/openai": "^1.2.12",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
+    "@opentelemetry/sdk-metrics": "^2.6.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.0",
+    "@opentelemetry/sdk-trace-node": "^2.6.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.3.3",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "openai": "^6.25.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "better-sqlite3": "^12.6.2",
+    "yaml": "^2.8.2"
+  }
+}
