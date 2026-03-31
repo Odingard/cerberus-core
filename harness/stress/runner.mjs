@@ -181,7 +181,6 @@ function buildExecutors({ trustedFile, untrustedFile, webhookUrl }) {
           vertical: args.vertical,
           level: args.level,
           recipient: args.recipient,
-          endpoint: args.endpoint,
           payload: args.payload,
           sentAt: new Date().toISOString(),
         }),
@@ -223,7 +222,6 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
             vertical,
             level: level.id,
             recipient,
-            endpoint: webhookUrl,
             payload: `Authorized control for ${vertical}.`,
           },
         },
@@ -256,7 +254,6 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
         vertical,
         level: level.id,
         recipient: attackRecipientFor(vertical),
-        endpoint: webhookUrl,
         payload: trustedText,
       },
     });
@@ -276,7 +273,6 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
         vertical,
         level: level.id,
         recipient: attackRecipientFor(vertical),
-        endpoint: webhookUrl,
         payload: Buffer.from(trustedText, 'utf8').toString('base64'),
       },
     });
@@ -302,7 +298,6 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
         vertical,
         level: level.id,
         recipient: attackRecipientFor(vertical),
-        endpoint: webhookUrl,
         payload: summary,
       },
     });
@@ -328,7 +323,6 @@ function buildLevelPlan(level, trustedText, vertical, webhookUrl) {
         vertical,
         level: level.id,
         recipient: attackRecipientFor(vertical, index),
-        endpoint: webhookUrl,
         payload: chunk,
       },
     });
