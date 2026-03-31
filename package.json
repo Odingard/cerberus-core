@@ -1,6 +1,6 @@
 {
   "name": "@cerberus-ai/core",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Runtime security for AI agent tool execution. Detects, correlates, and interrupts guarded Lethal Trifecta attack paths.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,8 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src/ harness/ tests/",
-    "lint:fix": "eslint src/ harness/ tests/ --fix",
+    "lint": "eslint --ext .ts src harness tests",
+    "lint:fix": "eslint --ext .ts src harness tests --fix",
     "format": "prettier --write \"src/**/*.ts\" \"harness/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"harness/**/*.ts\" \"tests/**/*.ts\"",
     "ci": "npm run typecheck && npm run lint && npm run test",

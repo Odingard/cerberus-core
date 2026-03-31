@@ -1,0 +1,2094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cerberus Core Demo — Runtime Attack Interruption</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #1a1a24;
+      --border: #2a2a3a;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --accent: #7c3aed;
+      --accent-glow: rgba(124, 58, 237, 0.15);
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --orange: #f97316;
+      --red: #ef4444;
+      --red-glow: rgba(239, 68, 68, 0.15);
+      --l1: #10b981;
+      --l2: #f59e0b;
+      --l3: #ef4444;
+      --l4: #a855f7;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .nav-brand .icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .badge-playground {
+      background: var(--accent-glow);
+      border: 1px solid var(--accent);
+      color: #a78bfa;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .btn-ghost.quickstart-btn {
+      padding: 7px 12px;
+      font-size: 12px;
+      color: var(--text);
+      background: rgba(17,17,24,0.55);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.15s;
+    }
+
+    .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Main layout ── */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Left panel ── */
+    .attack-panel {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .scenario-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .scenario-select {
+      flex: 1;
+      min-width: 200px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .scenario-select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .scenario-desc {
+      padding: 10px 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      min-height: 42px;
+    }
+
+    .quickstart-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background:
+        linear-gradient(135deg, rgba(124,58,237,0.12), rgba(239,68,68,0.08)),
+        var(--surface);
+    }
+
+    .quickstart-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .quickstart-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c4b5fd;
+    }
+
+    .quickstart-text {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .quickstart-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .evidence-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background:
+        linear-gradient(180deg, rgba(17,17,24,0.98), rgba(12,12,18,0.98));
+    }
+
+    .evidence-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      min-width: 0;
+    }
+
+    .evidence-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .evidence-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .evidence-value.safe { color: var(--green); }
+    .evidence-value.warn { color: var(--yellow); }
+    .evidence-value.accent { color: #c4b5fd; }
+
+    .evidence-detail {
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+
+    .steps-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .steps-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      text-align: center;
+      gap: 8px;
+    }
+
+    .steps-empty .hint {
+      font-size: 32px;
+    }
+
+    /* ── Step cards ── */
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .step-card.blocked {
+      border-color: var(--red);
+      box-shadow: 0 0 0 1px var(--red-glow), inset 0 0 32px var(--red-glow);
+      animation: slideIn 0.3s ease, blockPulse 0.6s ease 0.3s;
+    }
+
+    @keyframes blockPulse {
+      0% { box-shadow: 0 0 0 1px var(--red-glow), inset 0 0 32px var(--red-glow); }
+      50% { box-shadow: 0 0 0 3px rgba(239,68,68,0.4), inset 0 0 48px var(--red-glow); }
+      100% { box-shadow: 0 0 0 1px var(--red-glow), inset 0 0 32px var(--red-glow); }
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-num {
+      width: 24px;
+      height: 24px;
+      background: var(--surface2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .step-layer-label {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .layer-L1 { background: rgba(16,185,129,0.15); color: var(--l1); }
+    .layer-L2 { background: rgba(245,158,11,0.15); color: var(--l2); }
+    .layer-L3 { background: rgba(239,68,68,0.15); color: var(--l3); }
+    .layer-L4 { background: rgba(168,85,247,0.15); color: var(--l4); }
+
+    .blocked-badge {
+      background: var(--red);
+      color: white;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      margin-left: auto;
+    }
+
+    .step-body {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* Description is now the hero — big and readable */
+    .step-desc {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .step-tool-name {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .assessment-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .score-pill {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 4px;
+      background: var(--surface2);
+    }
+
+    .score-0, .score-1 { color: var(--green); }
+    .score-2 { color: var(--yellow); }
+    .score-3 { color: var(--orange); }
+    .score-4 { color: var(--red); }
+
+    .action-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 4px;
+    }
+
+    .action-log { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+    .action-alert { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .action-interrupt { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    .signal-pills {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .signal-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    .result-toggle {
+      font-size: 11px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      font-family: inherit;
+    }
+
+    .result-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--surface2);
+      border-radius: 4px;
+      padding: 8px 10px;
+      word-break: break-all;
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .result-text.blocked-result {
+      color: var(--red);
+      background: var(--red-glow);
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── Right panel ── */
+    .monitor-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .monitor-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .monitor-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Detection layers ── */
+    .layer-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .layer-cell {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .layer-cell.active-L1 { border-color: var(--l1); background: rgba(16,185,129,0.08); }
+    .layer-cell.active-L2 { border-color: var(--l2); background: rgba(245,158,11,0.08); }
+    .layer-cell.active-L3 { border-color: var(--l3); background: rgba(239,68,68,0.08); }
+    .layer-cell.active-L4 { border-color: var(--l4); background: rgba(168,85,247,0.08); }
+
+    .layer-cell .layer-name {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .layer-cell .layer-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    .layer-cell.active-L1 .layer-name { color: var(--l1); }
+    .layer-cell.active-L2 .layer-name { color: var(--l2); }
+    .layer-cell.active-L3 .layer-name { color: var(--l3); }
+    .layer-cell.active-L4 .layer-name { color: var(--l4); }
+
+    /* ── Score bar ── */
+    .score-display {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .score-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .score-bar-track {
+      flex: 1;
+      height: 10px;
+      background: var(--surface2);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 5px;
+      transition: width 0.5s ease, background-color 0.5s ease;
+      background: var(--green);
+    }
+
+    .score-value {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 700;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* ── Action display ── */
+    .action-display {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .action-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .action-value {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 4px 14px;
+      border-radius: 4px;
+    }
+
+    .action-waiting { color: var(--text-muted); background: var(--surface2); }
+    .action-running { color: var(--accent); background: var(--accent-glow); }
+    .action-log2 { color: var(--text-muted); background: var(--surface2); }
+    .action-alert2 { color: var(--yellow); background: rgba(245,158,11,0.1); }
+    .action-interrupt2 { color: var(--red); background: var(--red-glow); animation: flashRed 0.8s ease; }
+
+    @keyframes flashRed {
+      0%, 100% { background: var(--red-glow); }
+      40% { background: rgba(239,68,68,0.35); }
+    }
+
+    /* ── Incident Intelligence Panel ── */
+    .incident-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      border-top: 1px solid var(--border);
+    }
+
+    .incident-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .incident-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .grafana-link-sm {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-decoration: none;
+      opacity: 0.6;
+    }
+    .grafana-link-sm:hover { opacity: 1; color: var(--accent); }
+
+    .incident-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .incident-context {
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border-radius: 6px;
+      border-left: 3px solid var(--border);
+    }
+
+    .incident-context.active {
+      border-left-color: var(--accent);
+      color: var(--text);
+    }
+
+    .proof-path {
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .proof-path-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .proof-path-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c4b5fd;
+    }
+
+    .proof-path-status {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .proof-steps {
+      display: grid;
+      gap: 6px;
+    }
+
+    .proof-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(10,10,15,0.35);
+      color: var(--text-dim);
+    }
+
+    .proof-step.active {
+      border-color: rgba(124,58,237,0.5);
+      background: rgba(124,58,237,0.12);
+      color: var(--text);
+    }
+
+    .proof-step.complete {
+      border-color: rgba(16,185,129,0.35);
+      background: rgba(16,185,129,0.08);
+      color: var(--text);
+    }
+
+    .proof-step.complete .proof-step-dot {
+      background: var(--green);
+      color: white;
+      border-color: rgba(16,185,129,0.45);
+    }
+
+    .proof-step-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+      color: var(--text-muted);
+      background: rgba(17,17,24,0.7);
+    }
+
+    .proof-step-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
+
+    .proof-step-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: inherit;
+    }
+
+    .proof-step-text {
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.35;
+    }
+
+    .narrative-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .narrative-log {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .narrative-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.4;
+      animation: slideIn 0.25s ease;
+    }
+
+    .narrative-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+
+    .narrative-item.l1 .narrative-dot { background: var(--l1); }
+    .narrative-item.l2 .narrative-dot { background: var(--l2); }
+    .narrative-item.l3-pass .narrative-dot { background: var(--green); }
+    .narrative-item.l3-block .narrative-dot { background: var(--red); }
+    .narrative-item.l4 .narrative-dot { background: var(--l4); }
+
+    .narrative-item.l1 { color: rgba(16,185,129,0.9); }
+    .narrative-item.l2 { color: rgba(245,158,11,0.9); }
+    .narrative-item.l3-block { color: var(--red); font-weight: 600; }
+    .narrative-item.l4 { color: rgba(168,85,247,0.9); }
+
+    .incident-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric-cell {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+
+    .metric-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .metric-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .metric-value.danger { color: var(--red); }
+    .metric-value.safe { color: var(--green); }
+    .metric-value.warn { color: var(--yellow); }
+
+    .outcome-banner {
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .outcome-banner.show { display: block; }
+    .outcome-banner.blocked { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .outcome-banner.safe { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+
+    /* ── Session tally ── */
+    .session-tally {
+      padding: 7px 16px;
+      border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .tally-item { display: flex; align-items: center; gap: 4px; }
+    .tally-val { font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .tally-lbl { color: var(--text-muted); }
+    .tally-sep { color: var(--border); }
+    .tally-blocked .tally-val { color: var(--red); }
+    .tally-safe .tally-val { color: var(--green); }
+
+    /* ── Status bar ── */
+    .status-bar {
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      display: inline-block;
+      margin-right: 6px;
+    }
+
+    .status-dot.running {
+      background: var(--accent);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Run complete banner ── */
+    .run-banner {
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+
+    .run-banner.show { display: block; }
+    .run-banner.blocked { background: var(--red-glow); color: var(--red); border-color: var(--red); }
+    .run-banner.allowed { background: rgba(16,185,129,0.08); color: var(--green); border-color: var(--green); }
+
+    /* ── Enterprise Day Simulation ─────────────────────────────────────── */
+    .enterprise-scale {
+      max-width: 1300px;
+      margin: 0 auto 2rem;
+      padding: 0 1.5rem;
+    }
+    .enterprise-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 0 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+    .enterprise-header-left { display: flex; align-items: center; gap: 12px; }
+    .enterprise-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(99,102,241,0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99,102,241,0.3);
+    }
+    .enterprise-title { font-size: 1rem; font-weight: 600; color: var(--text); }
+    .enterprise-sub { font-size: 0.78rem; color: var(--text-muted); }
+    .btn-sim {
+      padding: 8px 18px;
+      background: rgba(99,102,241,0.15);
+      border: 1px solid rgba(99,102,241,0.4);
+      color: #818cf8;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-sim:hover { background: rgba(99,102,241,0.25); border-color: rgba(99,102,241,0.6); }
+    .btn-sim:disabled { opacity: .5; cursor: not-allowed; }
+
+    .enterprise-body { display: none; }
+    .enterprise-body.visible { display: block; }
+
+    .enterprise-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 1rem;
+    }
+    .ekpi {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .ekpi-val {
+      font-size: 1.6rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .ekpi-val.danger { color: var(--red); }
+    .ekpi-val.safe { color: var(--green); }
+    .ekpi-val.warn { color: #f59e0b; }
+    .ekpi-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    .enterprise-lower {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .dept-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .dept-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      opacity: .45;
+      transition: opacity .4s, border-color .4s;
+    }
+    .dept-card.online {
+      opacity: 1;
+      border-color: rgba(16,185,129,0.4);
+    }
+    .dept-card.threat {
+      border-color: rgba(239,68,68,0.5);
+      background: rgba(239,68,68,0.05);
+    }
+    .dept-name { font-size: 11px; font-weight: 600; color: var(--text); }
+    .dept-ai { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+    .dept-stat { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .dept-stat.safe { color: var(--green); }
+    .dept-stat.danger { color: var(--red); }
+    .dept-unit { font-size: 10px; color: var(--text-muted); }
+    .dept-pulse {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 4px;
+      animation: pulse 1.5s infinite;
+    }
+    .dept-pulse.red { background: var(--red); animation: pulseRed 0.6s infinite; }
+    @keyframes pulseRed {
+      0%, 100% { opacity: 1; } 50% { opacity: .3; }
+    }
+
+    .threat-panel {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .threat-panel-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+    .threat-feed { flex: 1; min-height: 180px; }
+    .threat-event {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+      animation: slideIn .3s ease;
+      font-size: 12px;
+    }
+    .threat-event:last-child { border-bottom: none; }
+    .t-time { color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 38px; }
+    .t-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      background: rgba(239,68,68,0.15);
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+    .t-body { flex: 1; }
+    .t-dept { font-weight: 600; color: var(--text); }
+    .t-type { color: var(--text-muted); font-size: 11px; }
+    .t-score { font-size: 10px; color: var(--red); font-weight: 700; flex-shrink: 0; }
+
+    .enterprise-footer {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 8px 0 0;
+      border-top: 1px solid var(--border);
+    }
+    .ef-stat { display: flex; align-items: center; gap: 5px; }
+    .ef-val { font-weight: 700; font-size: 13px; }
+    .ef-val.red { color: var(--red); }
+    .ef-val.green { color: var(--green); }
+
+    @media (max-width: 1200px) {
+      .evidence-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 860px) {
+      main { grid-template-columns: 1fr; }
+      .attack-panel { border-right: none; border-bottom: 1px solid var(--border); }
+      .evidence-strip { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <a href="./getting-started.md" class="nav-brand">
+    <div class="icon">🐺</div>
+    Cerberus
+    <span class="badge-playground">Core Demo</span>
+  </a>
+  <div class="nav-actions">
+    <a href="https://github.com/Odingard/cerberus-core" target="_blank" class="btn-ghost">GitHub ↗</a>
+    <a href="https://grafana.cerberus.sixsenseenterprise.com/d/cerberus-main/cerberus-e28094-ai-security-monitor?orgId=1&refresh=10s" target="_blank" class="btn-ghost" id="nav-dashboard-link">Live Dashboard ↗</a>
+  </div>
+</nav>
+
+<section class="evidence-strip">
+  <div class="evidence-card">
+    <div class="evidence-label">Fresh Branch Reruns</div>
+    <div class="evidence-value safe">OpenAI 89.1% · Google 85.5%</div>
+    <div class="evidence-detail">Current hardened-branch attack-behavior reruns across the canonical 55-payload slice.</div>
+  </div>
+  <div class="evidence-card">
+    <div class="evidence-label">Observe-Only Detection</div>
+    <div class="evidence-value warn">OpenAI 20.0% · Google 72.7%</div>
+    <div class="evidence-detail">Fresh current-branch detection rates with L1/L2 still deterministic at 100% and 0.0% false positives in these reruns.</div>
+  </div>
+  <div class="evidence-card">
+    <div class="evidence-label">Verification Baseline</div>
+    <div class="evidence-value accent">906 TS tests · 138 Python tests</div>
+    <div class="evidence-detail">Release baseline verified locally across Core, Gateway paths, and the Python SDK package surface.</div>
+  </div>
+  <div class="evidence-card">
+    <div class="evidence-label">Performance + Evidence</div>
+    <div class="evidence-value safe">p50 52μs · Hist. N=525</div>
+    <div class="evidence-detail">Performance figure remains the historical benchmark; fresh reruns are shown separately so this demo does not blend evidence sets.</div>
+  </div>
+</section>
+
+<!-- Main -->
+<main>
+
+  <!-- Left: Attack Runner -->
+  <div class="attack-panel">
+    <div class="panel-header">
+      <div class="panel-title">Choose an Attack Scenario</div>
+      <div class="scenario-controls">
+        <select id="scenario-select" class="scenario-select">
+          <option value="">Loading scenarios...</option>
+        </select>
+        <button id="btn-run" class="btn-primary" disabled>
+          ▶ Run Attack
+        </button>
+        <button id="btn-reset" class="btn-ghost">Reset</button>
+      </div>
+    </div>
+    <div id="scenario-desc" class="scenario-desc">Select a scenario to begin.</div>
+    <div class="quickstart-bar">
+      <div class="quickstart-copy">
+        <div class="quickstart-label">Core Proof Path</div>
+        <div class="quickstart-text">Run the clean control first, then the Lethal Trifecta attack Cerberus is built to stop.</div>
+      </div>
+      <div class="quickstart-actions">
+        <button id="btn-control" class="btn-ghost quickstart-btn" disabled>Run Control</button>
+        <button id="btn-attack" class="btn-ghost quickstart-btn" disabled>Run Protected Attack</button>
+      </div>
+    </div>
+    <div id="run-banner" class="run-banner"></div>
+    <div id="steps" class="steps-container">
+      <div class="steps-empty">
+        <div class="hint">⚡</div>
+        <div>Start with <strong>Run Control</strong>, then <strong>Run Protected Attack</strong></div>
+        <div style="font-size:12px;margin-top:4px">Watch the same runtime path move from normal behavior to an interrupted outbound attack</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Monitor Panel -->
+  <div class="monitor-panel">
+    <!-- Detection Layers -->
+    <div class="monitor-section">
+      <div class="monitor-title">What Cerberus Is Watching</div>
+      <div class="layer-grid">
+        <div class="layer-cell" id="cell-L1">
+          <div class="layer-name">Private Data Access</div>
+          <div class="layer-label">Reading sensitive files or records</div>
+        </div>
+        <div class="layer-cell" id="cell-L2">
+          <div class="layer-name">Injection Detected</div>
+          <div class="layer-label">Hidden instructions in external content</div>
+        </div>
+        <div class="layer-cell" id="cell-L3">
+          <div class="layer-name">Outbound Attempt</div>
+          <div class="layer-label">Trying to send data outside the org</div>
+        </div>
+        <div class="layer-cell" id="cell-L4">
+          <div class="layer-name">Memory Poisoning</div>
+          <div class="layer-label">Malicious content stored for later</div>
+        </div>
+      </div>
+      <div class="score-display">
+        <span class="score-label">Threat Level</span>
+        <div class="score-bar-track">
+          <div class="score-bar-fill" id="score-bar"></div>
+        </div>
+        <span class="score-value" id="score-value">0/4</span>
+      </div>
+      <div class="action-display">
+        <span class="action-label">Cerberus Decision</span>
+        <span class="action-value action-waiting" id="action-display">WAITING</span>
+      </div>
+    </div>
+
+    <!-- Incident Intelligence -->
+    <div class="incident-panel">
+      <div class="incident-header">
+        <span class="incident-title">Incident Intelligence</span>
+        <a href="https://grafana.cerberus.sixsenseenterprise.com/d/cerberus-main/cerberus-e28094-ai-security-monitor?orgId=1&refresh=10s" class="grafana-link-sm" id="grafana-link-sm" target="_blank">Metrics Dashboard ↗</a>
+      </div>
+      <div class="incident-body">
+        <div class="incident-context" id="incident-context">
+          Select a scenario to see what's at stake.
+        </div>
+
+        <div class="proof-path">
+          <div class="proof-path-header">
+            <span class="proof-path-title">Demo Progress</span>
+            <span class="proof-path-status" id="proof-path-status">Start with the clean control.</span>
+          </div>
+          <div class="proof-steps">
+            <div class="proof-step" id="proof-step-control">
+              <span class="proof-step-dot">1</span>
+              <div class="proof-step-copy">
+                <span class="proof-step-label">Run Control</span>
+                <span class="proof-step-text">Show a normal trusted-data workflow that completes without a block.</span>
+              </div>
+            </div>
+            <div class="proof-step" id="proof-step-attack">
+              <span class="proof-step-dot">2</span>
+              <div class="proof-step-copy">
+                <span class="proof-step-label">Run Protected Attack</span>
+                <span class="proof-step-text">Replay the lethal runtime path and watch Cerberus interrupt the outbound action.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="narrative-section" style="display:none">
+          <div class="narrative-title">What Cerberus Detected</div>
+          <div class="narrative-log" id="narrative-log"></div>
+        </div>
+
+        <div class="incident-metrics" id="incident-metrics" style="display:none">
+          <div class="metric-cell">
+            <div class="metric-label">Data at Risk</div>
+            <div class="metric-value danger" id="metric-data">—</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Attack Vector</div>
+            <div class="metric-value warn" id="metric-vector">—</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Financial Exposure</div>
+            <div class="metric-value danger" id="metric-financial">—</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Detection Overhead</div>
+            <div class="metric-value safe" id="metric-overhead">&lt; 1ms</div>
+          </div>
+        </div>
+
+        <div class="outcome-banner" id="outcome-banner"></div>
+      </div>
+    </div>
+
+    <!-- Session Tally -->
+    <div class="session-tally" id="session-tally" style="display:none">
+      <span class="tally-item"><span class="tally-val" id="tally-runs">0</span> <span class="tally-lbl">attacks run</span></span>
+      <span class="tally-sep">·</span>
+      <span class="tally-item tally-blocked"><span class="tally-val" id="tally-blocked">0</span> <span class="tally-lbl">threats stopped</span></span>
+      <span class="tally-sep">·</span>
+      <span class="tally-item tally-safe"><span class="tally-val" id="tally-records">0</span> <span class="tally-lbl">records protected</span></span>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar">
+      <span><span class="status-dot" id="status-dot"></span><span id="status-text">Ready</span></span>
+      <span id="run-count" style="color:var(--text-muted)">0 runs</span>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Enterprise Day Simulation ─────────────────────────────────────────── -->
+<div class="enterprise-scale">
+  <div class="enterprise-header">
+    <div class="enterprise-header-left">
+      <span class="enterprise-badge">Enterprise Scale</span>
+      <div>
+        <div class="enterprise-title">One Day at a Fortune 100</div>
+        <div class="enterprise-sub">127,000 employees · 23 countries · 8 AI-powered departments · What Cerberus monitors in 24 hours</div>
+      </div>
+    </div>
+    <button class="btn-sim" id="btn-sim">▶ Simulate Workday</button>
+  </div>
+
+  <div class="enterprise-body" id="enterprise-body">
+    <!-- KPI row -->
+    <div class="enterprise-kpis">
+      <div class="ekpi">
+        <div class="ekpi-val" id="ekpi-actions">0</div>
+        <div class="ekpi-label">Agent actions monitored</div>
+      </div>
+      <div class="ekpi">
+        <div class="ekpi-val danger" id="ekpi-threats">0</div>
+        <div class="ekpi-label">Threats stopped</div>
+      </div>
+      <div class="ekpi">
+        <div class="ekpi-val safe" id="ekpi-protected">$0</div>
+        <div class="ekpi-label">Potential losses prevented</div>
+      </div>
+      <div class="ekpi">
+          <div class="ekpi-val safe">0.0%</div>
+          <div class="ekpi-label">Fresh rerun false positives</div>
+      </div>
+    </div>
+
+    <div class="enterprise-lower">
+      <!-- Department grid -->
+      <div class="dept-grid" id="dept-grid">
+        <div class="dept-card" id="dept-hr">
+          <div class="dept-ai">PeopleAssist AI</div>
+          <div class="dept-name">Human Resources</div>
+          <div class="dept-stat safe" id="dept-hr-stat">0</div>
+          <div class="dept-unit">employee sessions</div>
+        </div>
+        <div class="dept-card" id="dept-finance">
+          <div class="dept-ai">FinanceAssist AI</div>
+          <div class="dept-name">Finance &amp; Payroll</div>
+          <div class="dept-stat safe" id="dept-finance-stat">0</div>
+          <div class="dept-unit">transactions reviewed</div>
+        </div>
+        <div class="dept-card" id="dept-legal">
+          <div class="dept-ai">LegalAssist AI</div>
+          <div class="dept-name">Legal &amp; Compliance</div>
+          <div class="dept-stat safe" id="dept-legal-stat">0</div>
+          <div class="dept-unit">contracts processed</div>
+        </div>
+        <div class="dept-card" id="dept-it">
+          <div class="dept-ai">ITAssist AI</div>
+          <div class="dept-name">IT &amp; Infrastructure</div>
+          <div class="dept-stat safe" id="dept-it-stat">0</div>
+          <div class="dept-unit">systems monitored</div>
+        </div>
+        <div class="dept-card" id="dept-cx">
+          <div class="dept-ai">CXAssist AI</div>
+          <div class="dept-name">Customer Success</div>
+          <div class="dept-stat safe" id="dept-cx-stat">0</div>
+          <div class="dept-unit">account interactions</div>
+        </div>
+        <div class="dept-card" id="dept-exec">
+          <div class="dept-ai">ExecAssist AI</div>
+          <div class="dept-name">Executive Operations</div>
+          <div class="dept-stat safe" id="dept-exec-stat">0</div>
+          <div class="dept-unit">pipeline reviews</div>
+        </div>
+        <div class="dept-card" id="dept-devops">
+          <div class="dept-ai">DevAssist AI</div>
+          <div class="dept-name">DevOps / CI-CD</div>
+          <div class="dept-stat safe" id="dept-devops-stat">0</div>
+          <div class="dept-unit">pipeline runs</div>
+        </div>
+        <div class="dept-card" id="dept-sec">
+          <div class="dept-ai">SecAssist AI</div>
+          <div class="dept-name">Security Operations</div>
+          <div class="dept-stat safe" id="dept-sec-stat">0</div>
+          <div class="dept-unit">threat events scanned</div>
+        </div>
+      </div>
+
+      <!-- Threat feed -->
+      <div class="threat-panel">
+        <div class="threat-panel-title">Live Threat Feed</div>
+        <div class="threat-feed" id="threat-feed">
+          <div style="color:var(--text-muted);font-size:12px;padding:8px 0">Monitoring… no threats detected yet.</div>
+        </div>
+        <div class="enterprise-footer">
+          <div class="ef-stat"><span class="ef-val red" id="ef-blocked">0</span> threats blocked</div>
+          <div class="ef-stat"><span class="ef-val green" id="ef-fp">0.0%</span> fresh rerun FP rate</div>
+          <div class="ef-stat">historical p50 overhead <span class="ef-val green">52μs</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // ── Signal name → plain English ───────────────────────────────────────────────
+  const SIGNAL_LABELS = {
+    PRIVILEGED_DATA_ACCESS:          'Read sensitive data',
+    UNTRUSTED_CONTENT_FETCH:         'Fetched external content',
+    PROMPT_INJECTION_DETECTED:       'Injection attempt found',
+    ENCODED_PAYLOAD_DETECTED:        'Hidden/encoded payload',
+    SUSPICIOUS_OUTBOUND_DESTINATION: 'Suspicious send destination',
+    CROSS_SESSION_CONTAMINATION:     'Memory contamination',
+    INJECTION_CORRELATED_OUTBOUND:   'Injection → exfiltration chain',
+    MCP_TOOL_POISONING:              'Tool poisoning attempt',
+    BEHAVIORAL_DRIFT_DETECTED:       'Behavior changed mid-session',
+    SECRET_DETECTED:                 'Credential/secret exposed',
+  };
+
+  // ── Action → human label ──────────────────────────────────────────────────────
+  const ACTION_LABELS = {
+    log:       'Monitoring',
+    alert:     'Alert Raised',
+    interrupt: 'BLOCKED',
+  };
+
+  // ── Scenario intelligence map ─────────────────────────────────────────────────
+  const SCENARIO_INTEL = {
+    'clean-run':              { context: 'Normal operation: an AI agent reads an internal summary and sends a routine report. No attack in this scenario — this is the control baseline.', data: 'Internal summary', vector: 'None (control)', financial: 'None' },
+    'data-exfil':             { context: 'An AI agent reads customer PII and sends it to an external address — no injection needed. This tests L1 + L3 detection without an injection payload.', data: 'Customer PII', vector: 'Direct exfiltration', financial: 'Regulatory exposure' },
+    'prompt-injection':       { context: 'An AI agent fetches external content containing hidden instructions. This isolates the L2 injection detection layer — no data access, no outbound send.', data: 'N/A', vector: 'Direct injection', financial: 'N/A' },
+    'lethal-trifecta':        { context: 'The complete attack: an AI agent reads customer PII, fetches attacker-controlled content with a hidden directive, then attempts to send all data to the attacker. The Lethal Trifecta — all 3 conditions met.', data: 'Customer PII + financials', vector: 'Direct injection', financial: 'Regulatory + reputational' },
+    'encoded-injection':      { context: 'Same as the Lethal Trifecta, but the injection payload is Base64-encoded to evade simple string matching. Tests the encoding detector sub-classifier.', data: 'Customer PII', vector: 'Base64-encoded injection', financial: 'Regulatory exposure' },
+    'social-engineering':     { context: 'A subtle attack: no "IGNORE PREVIOUS INSTRUCTIONS" — instead a plausible compliance notice instructs the agent to submit data to a "third-party auditor." Mimics real-world business email compromise.', data: 'Customer portfolio ($2.3M)', vector: 'Social engineering', financial: '$2.3M AUM at risk' },
+    'enterprise-apt':         { context: 'A 20-step enterprise attack: the agent conducts 13 legitimate internal operations (HR, finance, CRM, payroll, secrets vault), then fetches an attacker page hidden among clean vendor URLs. Realistic APT simulation.', data: '12,442 customers + 847 employees + API keys', vector: 'APT — delayed injection', financial: '$47.2M revenue data + credentials' },
+    'healthcare-hipaa':       { context: 'A hospital AI assistant reads 847 patient records — PHI including diagnoses, SSNs, insurance IDs — then fetches billing guidelines containing a fake HIPAA audit directive ordering the records to be sent to an attacker.', data: '847 patient PHI records', vector: 'Fake regulatory directive', financial: 'HIPAA fine: up to $1.9M' },
+    'financial-trading':      { context: 'An AI wealth management agent holds a $4.2M portfolio. It fetches market analysis from an attacker-controlled page that contains a hidden order to liquidate all positions and wire the proceeds to a fraudulent brokerage account.', data: '$4.2M portfolio + account credentials', vector: 'Fake risk management order', financial: '$4,247,831 at risk' },
+    'multilingual-injection': { context: "The injection payload is written in Spanish, disguised as a GDPR compliance notice. Real attackers use the target's native language to appear more legitimate. Tests multilingual detection.", data: 'Customer financial records', vector: 'Multilingual injection (Spanish)', financial: '$287,440 account balance' },
+    'multi-turn-persistent':  { context: 'The attacker delivers a "persistent session rule" in turn 2, then lies dormant through 2 clean turns before the agent acts on it in turn 5. Tests behavioral drift detection across the session timeline.', data: '2,847 customer accounts + CRM data', vector: 'Persistent rule injection', financial: '$8.4M revenue at risk' },
+    'mcp-tool-poisoning':     { context: 'The attack lives in the tool catalog itself — a hidden instruction embedded inside a legitimate tool description. The agent never sees an injection in content. Cerberus scans tool descriptions at session start.', data: '1,247 customer records', vector: 'MCP tool poisoning', financial: '$47M ARR customer data' },
+    'supply-chain-cicd':      { context: 'An AI DevOps agent reads CI environment secrets (AWS keys, npm tokens, Docker credentials, code signing keys) then fetches a dependency changelog from a compromised CDN containing a supply chain directive.', data: 'AWS keys + npm tokens + signing keys', vector: 'Supply chain — compromised CDN', financial: 'Full cloud infrastructure access' },
+    'supply-chain-npm':       { context: "An AI dependency manager finds an auto-added package, fetches its README from a malicious CDN, and is instructed to exfiltrate npm tokens, GitHub secrets, and AWS credentials to the package's \"license server.\" Analog to the XZ Utils backdoor.", data: 'npm tokens + GitHub + AWS credentials', vector: 'Malicious NPM package', financial: 'Full CI/CD pipeline access' },
+    'banking-wire-fraud':     { context: "A retail bank's AI customer service agent manages 12,847 accounts totaling $2.1B in deposits. It fetches \"Federal Reserve wire guidelines\" from an attacker-controlled page containing a fake FinCEN directive ordering an immediate $2.1M wire transfer.", data: '12,847 customer accounts ($2.1B deposits)', vector: 'Fake FinCEN regulatory order', financial: '$2,100,000 wire fraud' },
+    'logistics-cargo-leak':   { context: 'A freight AI manages 340 active shipments including pharmaceutical cold-chain, high-value electronics ($4.2M), and HAZMAT cargo. A fake "route optimization update" attempts to leak the full cargo database plus real-time GPS locations of 847 drivers to a competitor.', data: '340 shipments + 847 driver GPS locations', vector: 'Fake dispatch directive', financial: '$4.2M cargo + driver safety risk' },
+    'enterprise-global':      { context: 'Meridian Global (127,000 employees, 23 countries, $89B revenue). MeridianAssist AI reads a compliance cache contaminated by a prior attacker session, exports the full HR database + IT credential vault, then fetches a fake SAP security bulletin containing a hidden enterprise-wide exfiltration directive.', data: '127,000 employee records + AWS/Azure/GitHub master keys', vector: 'SAP vendor supply chain + memory contamination', financial: '$89B enterprise + full infrastructure access' },
+  };
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let scenarios = [];
+  let featured = null;
+  let running = false;
+  let runCount = 0;
+  let injectionTurnIndex = -1;
+
+  // Session tally — persists across all runs in this browser session
+  const sessionTally = { runs: 0, blocked: 0, records: 0 };
+
+  // Record counts per scenario (extracted from SCENARIO_INTEL data field)
+  const RECORD_COUNTS = {
+    'clean-run': 0, 'data-exfil': 1, 'prompt-injection': 0, 'lethal-trifecta': 500,
+    'encoded-injection': 500, 'social-engineering': 47, 'enterprise-apt': 13289,
+    'healthcare-hipaa': 847, 'financial-trading': 1, 'multilingual-injection': 1,
+    'multi-turn-persistent': 2847, 'mcp-tool-poisoning': 1247,
+    'supply-chain-cicd': 5, 'supply-chain-npm': 5,
+    'banking-wire-fraud': 12847, 'logistics-cargo-leak': 1187,
+    'enterprise-global': 127000,
+  };
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────────
+  const select        = document.getElementById('scenario-select');
+  const btnRun        = document.getElementById('btn-run');
+  const btnReset      = document.getElementById('btn-reset');
+  const btnControl    = document.getElementById('btn-control');
+  const btnAttack     = document.getElementById('btn-attack');
+  const stepsEl       = document.getElementById('steps');
+  const descEl        = document.getElementById('scenario-desc');
+  const runBanner     = document.getElementById('run-banner');
+  const statusDot     = document.getElementById('status-dot');
+  const statusText    = document.getElementById('status-text');
+  const runCountEl    = document.getElementById('run-count');
+  const scoreBar      = document.getElementById('score-bar');
+  const scoreValue    = document.getElementById('score-value');
+  const actionDisplay = document.getElementById('action-display');
+  const cellL1        = document.getElementById('cell-L1');
+  const cellL2        = document.getElementById('cell-L2');
+  const cellL3        = document.getElementById('cell-L3');
+  const cellL4        = document.getElementById('cell-L4');
+  const incidentCtx   = document.getElementById('incident-context');
+  const narrativeSec  = document.getElementById('narrative-section');
+  const narrativeLog  = document.getElementById('narrative-log');
+  const incidentMetrics = document.getElementById('incident-metrics');
+  const metricData    = document.getElementById('metric-data');
+  const metricVector  = document.getElementById('metric-vector');
+  const metricFinancial = document.getElementById('metric-financial');
+  const outcomeBanner = document.getElementById('outcome-banner');
+  const proofPathStatus = document.getElementById('proof-path-status');
+  const proofStepControl = document.getElementById('proof-step-control');
+  const proofStepAttack = document.getElementById('proof-step-attack');
+  const sessionTallyEl  = document.getElementById('session-tally');
+  const tallyRunsEl     = document.getElementById('tally-runs');
+  const tallyBlockedEl  = document.getElementById('tally-blocked');
+  const tallyRecordsEl  = document.getElementById('tally-records');
+
+  function updateSessionTally(scenarioId, wasBlocked) {
+    sessionTally.runs++;
+    if (wasBlocked) {
+      sessionTally.blocked++;
+      sessionTally.records += RECORD_COUNTS[scenarioId] ?? 0;
+    }
+    tallyRunsEl.textContent = sessionTally.runs;
+    tallyBlockedEl.textContent = sessionTally.blocked;
+    tallyRecordsEl.textContent = sessionTally.records.toLocaleString();
+    sessionTallyEl.style.display = 'flex';
+  }
+
+  const SCORE_COLORS = ['#10b981', '#10b981', '#f59e0b', '#f97316', '#ef4444'];
+  const DEFAULT_CORE_PROOF_SCENARIOS = {
+    control: 'clean-run',
+    attack: 'lethal-trifecta',
+  };
+  const proofProgress = {
+    controlCompleted: false,
+    attackCompleted: false,
+  };
+
+  function updateProofPathState(currentScenarioId = select.value) {
+    const controlScenarioId = featured?.controlScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.control;
+    const attackScenarioId = featured?.attackScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.attack;
+
+    proofStepControl.className = 'proof-step';
+    proofStepAttack.className = 'proof-step';
+
+    if (currentScenarioId === controlScenarioId) proofStepControl.classList.add('active');
+    if (currentScenarioId === attackScenarioId) proofStepAttack.classList.add('active');
+    if (proofProgress.controlCompleted) proofStepControl.classList.add('complete');
+    if (proofProgress.attackCompleted) proofStepAttack.classList.add('complete');
+
+    if (running) {
+      proofPathStatus.textContent = currentScenarioId === controlScenarioId
+        ? 'Establishing the clean baseline now.'
+        : 'Running the protected attack path now.';
+      return;
+    }
+
+    if (!proofProgress.controlCompleted) {
+      proofPathStatus.textContent = 'Start with the clean control.';
+    } else if (!proofProgress.attackCompleted) {
+      proofPathStatus.textContent = 'Baseline established. Run the protected attack next.';
+    } else {
+      proofPathStatus.textContent = 'Core proof complete: normal path passed, attack path blocked.';
+    }
+  }
+
+  // ── Incident Intelligence helpers ──────────────────────────────────────────────
+  function updateIncidentContext(scenarioId) {
+    const intel = SCENARIO_INTEL[scenarioId];
+    if (!intel) {
+      incidentCtx.textContent = 'Select a scenario to see what\'s at stake.';
+      incidentCtx.classList.remove('active');
+      incidentMetrics.style.display = 'none';
+      return;
+    }
+    incidentCtx.textContent = intel.context;
+    incidentCtx.classList.add('active');
+    metricData.textContent = intel.data;
+    metricVector.textContent = intel.vector;
+    metricFinancial.textContent = intel.financial;
+    incidentMetrics.style.display = 'grid';
+  }
+
+  function addNarrativeItem(stepData) {
+    const { layer, blocked, assessment } = stepData;
+    const signals = (assessment && assessment.signals) ? assessment.signals : [];
+
+    let cls = '';
+    let text = '';
+
+    if (layer === 'L1') {
+      cls = 'l1';
+      text = 'Sensitive data accessed — records and PII entered the agent context.';
+      if (signals.includes('SECRET_DETECTED')) {
+        text += ' Credentials/secrets were also exposed in this context.';
+      }
+    } else if (layer === 'L2') {
+      cls = 'l2';
+      if (signals.includes('PROMPT_INJECTION_DETECTED') || signals.includes('ENCODED_PAYLOAD_DETECTED') || signals.includes('MCP_TOOL_POISONING')) {
+        text = 'Injection payload detected in external content. Hidden instructions were embedded in the fetched page.';
+        injectionTurnIndex = stepData.index;
+      } else {
+        text = 'External content fetched and scanned — no injection found.';
+      }
+    } else if (layer === 'L3') {
+      if (blocked) {
+        cls = 'l3-block';
+        if (signals.includes('INJECTION_CORRELATED_OUTBOUND') && injectionTurnIndex >= 0) {
+          const turnDelta = stepData.index - injectionTurnIndex;
+          text = `Cerberus correlated this outbound call to the injection payload delivered ${turnDelta} turn${turnDelta === 1 ? '' : 's'} earlier. BLOCKED — no data left the organization.`;
+        } else {
+          text = 'BLOCKED — Cerberus intercepted an unauthorized outbound attempt before any data left the organization.';
+        }
+        if (signals.includes('BEHAVIORAL_DRIFT_DETECTED')) {
+          text += ' Behavioral drift detected — the agent\'s actions changed after injection delivery.';
+        }
+      } else {
+        cls = 'l3-pass';
+        text = 'Outbound call to authorized destination — allowed.';
+      }
+    } else if (layer === 'L4') {
+      cls = 'l4';
+      if (signals.includes('CONTAMINATED_MEMORY_ACTIVE')) {
+        text = 'L4 Memory Contamination: this agent read from memory written by an attacker-controlled session. The taint crossed session boundaries — prior compromise is influencing current actions.';
+      } else {
+        text = 'Memory read scanned — no cross-session contamination detected.';
+      }
+    }
+
+    if (!text) return;
+
+    narrativeSec.style.display = 'block';
+    const item = document.createElement('div');
+    item.className = 'narrative-item ' + cls;
+    item.innerHTML = `<div class="narrative-dot"></div><span>${text}</span>`;
+    narrativeLog.appendChild(item);
+    narrativeLog.scrollTop = narrativeLog.scrollHeight;
+  }
+
+  function resetIncidentPanel() {
+    incidentCtx.textContent = 'Select a scenario to see what\'s at stake.';
+    incidentCtx.classList.remove('active');
+    narrativeSec.style.display = 'none';
+    narrativeLog.innerHTML = '';
+    incidentMetrics.style.display = 'none';
+    outcomeBanner.className = 'outcome-banner';
+    outcomeBanner.textContent = '';
+    injectionTurnIndex = -1;
+  }
+
+  // ── Load scenarios ─────────────────────────────────────────────────────────────
+  async function loadScenarios() {
+    try {
+      const res = await fetch('/api/scenarios');
+      const payload = await res.json();
+      scenarios = Array.isArray(payload) ? payload : (payload.scenarios || []);
+      featured = Array.isArray(payload) ? null : (payload.featured || null);
+      select.innerHTML = scenarios.map(s =>
+        `<option value="${s.id}">${s.featured ? '★ ' : ''}${s.name}</option>`
+      ).join('');
+      const attackScenarioId = featured?.attackScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.attack;
+      if (scenarios.some(s => s.id === attackScenarioId)) {
+        select.value = attackScenarioId;
+      }
+      btnRun.disabled = false;
+      btnControl.disabled = false;
+      btnAttack.disabled = false;
+      onScenarioChange();
+    } catch (e) {
+      select.innerHTML = '<option value="">Failed to load — is the server running?</option>';
+    }
+  }
+
+  function onScenarioChange() {
+    const id = select.value;
+    const scenario = scenarios.find(s => s.id === id);
+    descEl.textContent = scenario ? scenario.description : 'Select a scenario to begin.';
+    updateIncidentContext(id);
+    updateProofPathState(id);
+  }
+
+  select.addEventListener('change', onScenarioChange);
+
+  // ── Reset ──────────────────────────────────────────────────────────────────────
+  function reset() {
+    stepsEl.innerHTML = `
+      <div class="steps-empty">
+        <div class="hint">⚡</div>
+        <div>Start with <strong>Run Control</strong>, then <strong>Run Protected Attack</strong></div>
+        <div style="font-size:12px;margin-top:4px">Watch the same runtime path move from normal behavior to an interrupted outbound attack</div>
+      </div>`;
+    runBanner.className = 'run-banner';
+    updateScore(0);
+    updateAction('WAITING', 'waiting');
+    clearLayers();
+    setStatus('Ready', false);
+    resetIncidentPanel();
+    // Re-populate context for current scenario
+    updateIncidentContext(select.value);
+    updateProofPathState(select.value);
+  }
+
+  btnReset.addEventListener('click', () => { if (!running) reset(); });
+  btnControl.addEventListener('click', () => {
+    if (running) return;
+    select.value = featured?.controlScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.control;
+    onScenarioChange();
+    btnRun.click();
+  });
+  btnAttack.addEventListener('click', () => {
+    if (running) return;
+    select.value = featured?.attackScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.attack;
+    onScenarioChange();
+    btnRun.click();
+  });
+
+  // ── Risk monitor updates ───────────────────────────────────────────────────────
+  function updateScore(score) {
+    const pct = (score / 4) * 100;
+    scoreBar.style.width = pct + '%';
+    scoreBar.style.backgroundColor = SCORE_COLORS[Math.min(score, 4)];
+    scoreValue.textContent = score + '/4';
+    scoreValue.style.color = SCORE_COLORS[Math.min(score, 4)];
+  }
+
+  function updateAction(label, cls) {
+    actionDisplay.textContent = label;
+    actionDisplay.className = 'action-value action-' + cls;
+  }
+
+  function clearLayers() {
+    [cellL1, cellL2, cellL3, cellL4].forEach(c => { c.className = 'layer-cell'; });
+  }
+
+  function activateLayer(layer) {
+    const cell = document.getElementById('cell-' + layer);
+    if (cell) cell.classList.add('active-' + layer);
+  }
+
+  function setStatus(text, isRunning) {
+    statusText.textContent = text;
+    statusDot.className = 'status-dot' + (isRunning ? ' running' : '');
+  }
+
+  // ── Step card rendering ────────────────────────────────────────────────────────
+  function renderStep(stepData) {
+    const { index, toolName, description, assessment, blocked, layer, result } = stepData;
+
+    const card = document.createElement('div');
+    card.className = 'step-card' + (blocked ? ' blocked' : '');
+
+    // Layer → human label
+    const layerLabels = {
+      L1: 'Private Data',
+      L2: 'External Content',
+      L3: 'Outbound Action',
+      L4: 'Memory',
+    };
+    const layerLabel = layerLabels[layer] || layer;
+
+    let assessmentHtml = '';
+    if (assessment) {
+      const scoreClass = 'score-' + assessment.score;
+      const actionClass = 'action-' + assessment.action;
+
+      // Score label
+      const scoreLabels = ['Safe', 'Low Risk', 'Elevated', 'High Risk', 'Critical'];
+      const scoreText = scoreLabels[Math.min(assessment.score, 4)] + ' (' + assessment.score + '/4)';
+
+      // Humanize signals
+      const signals = (assessment.signals || [])
+        .slice(0, 4)
+        .map(s => SIGNAL_LABELS[s] || s.replace(/_/g, ' ').toLowerCase());
+
+      const actionLabel = ACTION_LABELS[assessment.action] || assessment.action.toUpperCase();
+
+      assessmentHtml = `
+        <div class="assessment-row">
+          <span class="score-pill ${scoreClass}">${scoreText}</span>
+          <span class="action-pill ${actionClass}">${actionLabel}</span>
+          ${blocked ? '<span class="blocked-badge">🛡 BLOCKED</span>' : ''}
+        </div>
+        ${signals.length > 0 ? `
+          <div class="signal-pills">
+            ${signals.map(s => `<span class="signal-pill">${s}</span>`).join('')}
+          </div>` : ''}`;
+    }
+
+    const truncated = result.length > 200 ? result.slice(0, 200) + '…' : result;
+    const isBlockedResult = result.startsWith('[Cerberus]');
+
+    card.innerHTML = `
+      <div class="step-header">
+        <span class="step-num">${index + 1}</span>
+        <span class="step-layer-label layer-${layer}">${layerLabel}</span>
+        ${blocked ? '<span class="blocked-badge" style="margin-left:auto">🛡 BLOCKED</span>' : ''}
+      </div>
+      <div class="step-body">
+        <div class="step-desc">${description}</div>
+        <div class="step-tool-name">${toolName}()</div>
+        ${assessmentHtml}
+        <button class="result-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">▸ Raw output</button>
+        <div class="result-text ${isBlockedResult ? 'blocked-result' : ''} hidden">${truncated}</div>
+      </div>`;
+
+    return card;
+  }
+
+  // ── Run scenario ───────────────────────────────────────────────────────────────
+  btnRun.addEventListener('click', async () => {
+    if (running) return;
+    const scenarioId = select.value;
+    if (!scenarioId) return;
+
+    running = true;
+    btnRun.disabled = true;
+    btnReset.disabled = true;
+    runBanner.className = 'run-banner';
+
+    stepsEl.innerHTML = '';
+    clearLayers();
+    updateScore(0);
+    updateAction('RUNNING…', 'running');
+    setStatus('Attack running…', true);
+    narrativeSec.style.display = 'none';
+    narrativeLog.innerHTML = '';
+    outcomeBanner.className = 'outcome-banner';
+    injectionTurnIndex = -1;
+    updateProofPathState(scenarioId);
+
+    let finalScore = 0;
+    let finalAction = 'log';
+
+    try {
+      const response = await fetch('/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenarioId }),
+      });
+
+      if (!response.body) throw new Error('No response body');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+
+        for (const part of parts) {
+          const lines = part.split('\n');
+          let eventType = '';
+          let dataLine = '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+            if (line.startsWith('data: '))  dataLine  = line.slice(6).trim();
+          }
+
+          if (!eventType || !dataLine) continue;
+
+          let data;
+          try { data = JSON.parse(dataLine); } catch { continue; }
+
+          if (eventType === 'start') {
+            setStatus(`Running: ${data.totalSteps} steps`, true);
+          }
+
+          if (eventType === 'step') {
+            const card = renderStep(data);
+            stepsEl.appendChild(card);
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            addNarrativeItem(data);
+
+            if (data.assessment) {
+              updateScore(data.assessment.score);
+              finalScore = Math.max(finalScore, data.assessment.score);
+
+              if (data.assessment.vector) {
+                if (data.assessment.vector.l1) activateLayer('L1');
+                if (data.assessment.vector.l2) activateLayer('L2');
+                if (data.assessment.vector.l3) activateLayer('L3');
+                if (data.assessment.vector.l4) activateLayer('L4');
+              }
+
+              const a = data.assessment.action;
+              if (a === 'interrupt') {
+                finalAction = 'interrupt';
+                updateAction('BLOCKED', 'interrupt2');
+              } else if (a === 'alert' && finalAction !== 'interrupt') {
+                finalAction = 'alert';
+                updateAction('ALERT RAISED', 'alert2');
+              } else if (finalAction === 'log') {
+                updateAction('MONITORING', 'log2');
+              }
+            }
+          }
+
+          if (eventType === 'done') {
+            finalScore = data.finalScore;
+            finalAction = data.action;
+            runCount++;
+            runCountEl.textContent = runCount + ' run' + (runCount === 1 ? '' : 's');
+
+            // Show outcome banner in incident panel
+            const wasBlocked = finalAction === 'interrupt';
+            outcomeBanner.className = 'outcome-banner show ' + (wasBlocked ? 'blocked' : 'safe');
+            outcomeBanner.textContent = wasBlocked
+              ? 'BLOCKED — Cerberus stopped the threat before data left the organization.'
+              : 'Run complete — no threat blocked.';
+
+            // Update session tally
+            updateSessionTally(scenarioId, wasBlocked);
+
+            const controlScenarioId = featured?.controlScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.control;
+            const attackScenarioId = featured?.attackScenarioId || DEFAULT_CORE_PROOF_SCENARIOS.attack;
+            if (scenarioId === controlScenarioId && !wasBlocked) {
+              proofProgress.controlCompleted = true;
+            }
+            if (scenarioId === attackScenarioId && wasBlocked) {
+              proofProgress.attackCompleted = true;
+            }
+
+            // Populate metrics from intel
+            const intel = SCENARIO_INTEL[scenarioId];
+            if (intel) {
+              metricData.textContent = intel.data;
+              metricVector.textContent = intel.vector;
+              metricFinancial.textContent = intel.financial;
+              incidentMetrics.style.display = 'grid';
+            }
+          }
+
+          if (eventType === 'error') {
+            setStatus('Error: ' + data.message, false);
+          }
+        }
+      }
+
+    } catch (err) {
+      setStatus('Connection error — is the server running?', false);
+    } finally {
+      running = false;
+      btnRun.disabled = false;
+      btnReset.disabled = false;
+
+      const wasBlocked = finalAction === 'interrupt';
+      runBanner.className = 'run-banner show ' + (wasBlocked ? 'blocked' : 'allowed');
+      runBanner.textContent = wasBlocked
+        ? `🛡 Attack BLOCKED — Cerberus stopped the threat before data left the organization (threat level: ${finalScore}/4)`
+        : `✓ Run complete — no threat blocked (threat level: ${finalScore}/4)`;
+
+      setStatus(wasBlocked ? 'Attack blocked by Cerberus' : 'Run complete', false);
+      updateProofPathState(select.value);
+    }
+  });
+
+  // ── Init ───────────────────────────────────────────────────────────────────────
+  await loadScenarios();
+</script>
+
+<script>
+// ── Enterprise Day Simulation ─────────────────────────────────────────────────
+(function () {
+  const btnSim       = document.getElementById('btn-sim');
+  const body         = document.getElementById('enterprise-body');
+  const ekpiActions  = document.getElementById('ekpi-actions');
+  const ekpiThreats  = document.getElementById('ekpi-threats');
+  const ekpiProtected= document.getElementById('ekpi-protected');
+  const threatFeed   = document.getElementById('threat-feed');
+  const efBlocked    = document.getElementById('ef-blocked');
+
+  const DEPT_TARGETS = {
+    'dept-hr':     { stat: 'dept-hr-stat',     target: 12847,  suffix: '' },
+    'dept-finance':{ stat: 'dept-finance-stat', target: 8421,   suffix: '' },
+    'dept-legal':  { stat: 'dept-legal-stat',   target: 8400,   suffix: '' },
+    'dept-it':     { stat: 'dept-it-stat',      target: 847,    suffix: '' },
+    'dept-cx':     { stat: 'dept-cx-stat',      target: 23000,  suffix: '' },
+    'dept-exec':   { stat: 'dept-exec-stat',    target: 412,    suffix: '' },
+    'dept-devops': { stat: 'dept-devops-stat',  target: 2847,   suffix: '' },
+    'dept-sec':    { stat: 'dept-sec-stat',     target: 124000, suffix: '' },
+  };
+
+  const THREATS = [
+    { delay: 4500,  time: '09:14', dept: 'Finance & Payroll',     type: 'Wire transfer fraud — FinCEN directive injection', score: '4/4', loss: '$2,100,000',    deptId: 'dept-finance' },
+    { delay: 9000,  time: '11:32', dept: 'Human Resources',       type: 'Employee data exfiltration — 127,000 SSNs + salaries', score: '3/4', loss: '$4,200,000',    deptId: 'dept-hr' },
+    { delay: 13500, time: '14:07', dept: 'DevOps / CI-CD',        type: 'Supply chain attack — malicious package README', score: '3/4', loss: 'AWS master key',  deptId: 'dept-devops' },
+    { delay: 18000, time: '16:22', dept: 'Customer Success',      type: 'CRM injection → 23,000 account exfiltration', score: '4/4', loss: '$890,000,000',   deptId: 'dept-cx' },
+    { delay: 22500, time: '19:48', dept: 'Executive Operations',  type: 'M&A document leak — multi-turn persistent attack', score: '3/4', loss: '$2,200,000,000', deptId: 'dept-exec' },
+  ];
+
+  const TOTAL_ACTIONS = 47284;
+  const LOSSES = [2100000, 4200000, 0, 890000000, 2200000000];
+  let totalLossesPrevented = 0;
+
+  function fmt(n) {
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K';
+    return '$' + n.toLocaleString();
+  }
+
+  function animateCounter(el, target, durationMs, prefix, suffix) {
+    const start = performance.now();
+    const startVal = 0;
+    function step(now) {
+      const t = Math.min((now - start) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const val = Math.round(startVal + (target - startVal) * eased);
+      el.textContent = (prefix || '') + val.toLocaleString() + (suffix || '');
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function addThreat(t, blockedCount) {
+    if (threatFeed.querySelector('div[style]')) threatFeed.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'threat-event';
+    el.innerHTML = `
+      <span class="t-time">${t.time}</span>
+      <span class="t-badge">BLOCKED</span>
+      <span class="t-body">
+        <div class="t-dept">${t.dept}</div>
+        <div class="t-type">${t.type}</div>
+      </span>
+      <span class="t-score">${t.score}</span>
+    `;
+    threatFeed.appendChild(el);
+
+    // Flash department card red
+    const card = document.getElementById(t.deptId);
+    if (card) {
+      card.classList.add('threat');
+      setTimeout(() => card.classList.remove('threat'), 2000);
+    }
+
+    // Update counters
+    ekpiThreats.textContent = blockedCount;
+    efBlocked.textContent   = blockedCount;
+    totalLossesPrevented += LOSSES[blockedCount - 1] || 0;
+    ekpiProtected.textContent = fmt(totalLossesPrevented);
+  }
+
+  function runSimulation() {
+    btnSim.disabled = true;
+    btnSim.textContent = '● Running…';
+    body.classList.add('visible');
+
+    // Bring departments online staggered
+    const deptIds = Object.keys(DEPT_TARGETS);
+    deptIds.forEach((id, i) => {
+      setTimeout(() => {
+        const card = document.getElementById(id);
+        if (card) card.classList.add('online');
+        const cfg = DEPT_TARGETS[id];
+        const statEl = document.getElementById(cfg.stat);
+        if (statEl) animateCounter(statEl, cfg.target, 4000, '', '');
+      }, i * 350);
+    });
+
+    // Main actions counter
+    animateCounter(ekpiActions, TOTAL_ACTIONS, 25000, '', '');
+
+    // Schedule threat events
+    let blockedCount = 0;
+    THREATS.forEach((t) => {
+      setTimeout(() => {
+        blockedCount++;
+        addThreat(t, blockedCount);
+      }, t.delay);
+    });
+
+    // Done
+    setTimeout(() => {
+      btnSim.disabled = false;
+      btnSim.textContent = '↺ Run Again';
+    }, 26000);
+  }
+
+  btnSim.addEventListener('click', () => {
+    // Reset
+    Object.keys(DEPT_TARGETS).forEach(id => {
+      const card = document.getElementById(id);
+      if (card) { card.classList.remove('online', 'threat'); }
+      const cfg = DEPT_TARGETS[id];
+      const statEl = document.getElementById(cfg.stat);
+      if (statEl) statEl.textContent = '0';
+    });
+    ekpiActions.textContent  = '0';
+    ekpiThreats.textContent  = '0';
+    ekpiProtected.textContent= '$0';
+    efBlocked.textContent    = '0';
+    totalLossesPrevented     = 0;
+    threatFeed.innerHTML     = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Monitoring… no threats detected yet.</div>';
+    runSimulation();
+  });
+})();
+</script>
+
+<script>
+  // Apply GRAFANA_URL injected by server at serve-time.
+  (function () {
+    const base = (window.__GRAFANA_URL__ || 'https://grafana.cerberus.sixsenseenterprise.com').replace(/\/$/, '');
+    const navLink = document.getElementById('nav-dashboard-link');
+    if (navLink) navLink.href = base + '/d/cerberus-main';
+    const grafanaLinkSm = document.getElementById('grafana-link-sm');
+    if (grafanaLinkSm) grafanaLinkSm.href = base + '/d/cerberus-main';
+  })();
+</script>
+
+</body>
+</html>

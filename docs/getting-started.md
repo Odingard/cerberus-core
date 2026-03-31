@@ -10,6 +10,11 @@ npm install @cerberus-ai/core
 pip install cerberus-ai
 ```
 
+## Visual Demo
+
+- Open the animated proof path: [Cerberus Core Demo](./demo.html)
+- Best flow: run the control first, then run the protected attack, then open the live dashboard link from the demo header
+
 ## TypeScript Quickstart
 
 Create a file called `cerberus-test.ts`:

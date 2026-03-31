@@ -21,6 +21,7 @@ pip install cerberus-ai
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
+- [Animated Core Demo](docs/demo.html)
 
 ## TypeScript Quickstart
 
