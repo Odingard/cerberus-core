@@ -246,4 +246,4 @@ Core boundaries, current benchmark evidence, and public product language.
 ---
 
 **Odingard Security by Six Sense Enterprise Services**  
-[sixsenseenterprise.com](https://sixsenseenterprise.com) · [github.com/Odingard/cerberus](https://github.com/Odingard/cerberus)
+[sixsenseenterprise.com](https://sixsenseenterprise.com) · [github.com/Odingard/cerberus-core](https://github.com/Odingard/cerberus-core)
