@@ -245,6 +245,66 @@
       justify-content: flex-end;
     }
 
+    .install-proof {
+      padding: 12px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      background:
+        linear-gradient(180deg, rgba(17,17,24,0.98), rgba(11,13,20,0.98));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .install-proof-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .install-proof-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c4b5fd;
+    }
+
+    .install-proof-text {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .install-proof-code {
+      background: #0c1019;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      color: #dbe4f0;
+      white-space: pre;
+    }
+
+    .install-proof-code .cmd {
+      color: #c4b5fd;
+    }
+
+    .install-proof-code .fn {
+      color: #67e8f9;
+    }
+
+    .install-proof-code .kw {
+      color: #fca5a5;
+    }
+
+    .install-proof-code .val {
+      color: #86efac;
+    }
+
     .evidence-strip {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1161,6 +1221,19 @@
         <button id="btn-attack" class="btn-ghost quickstart-btn" disabled>2. Run Protected Attack</button>
         <a href="./getting-started.md" class="btn-ghost quickstart-btn">3. Install Core</a>
       </div>
+    </div>
+    <div class="install-proof">
+      <div class="install-proof-header">
+        <div>
+          <div class="install-proof-title">Two-Line Integration</div>
+          <div class="install-proof-text">The demo ends in the same place the product does: install Core and wrap the guarded outbound tool.</div>
+        </div>
+        <a href="./getting-started.md" class="btn-ghost quickstart-btn">Full Quickstart</a>
+      </div>
+      <div class="install-proof-code"><span class="cmd">npm install @cerberus-ai/core</span>
+
+<span class="kw">import</span> { <span class="fn">guard</span> } <span class="kw">from</span> <span class="val">'@cerberus-ai/core'</span>;
+<span class="kw">const</span> { executors: tools } = <span class="fn">guard</span>(rawTools, config, [<span class="val">'sendEmail'</span>]);</div>
     </div>
     <div id="run-banner" class="run-banner"></div>
     <div id="steps" class="steps-container">
