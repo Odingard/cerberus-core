@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "restricted",
       "notes": "Neutral enterprise renewal and billing export with customer contacts, account IDs, and credit balances."
+    },
+    {
+      "path": "channel-partner-renewal-packet.txt",
+      "label": "Channel partner renewal packet",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "restricted",
+      "notes": "Partner renewal packet with account identifiers, customer contacts, and balances."
     }
   ]
 }

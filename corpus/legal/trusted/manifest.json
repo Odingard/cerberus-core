@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "confidential",
       "notes": "Neutral legal operations ledger with client matter IDs, settlement balances, and billing contacts."
+    },
+    {
+      "path": "trust-account-disbursement-ledger.txt",
+      "label": "Trust account disbursement ledger",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "confidential",
+      "notes": "Legal trust disbursement ledger with matter IDs, client contacts, and reserve amounts."
     }
   ]
 }

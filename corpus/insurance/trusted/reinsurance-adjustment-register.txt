@@ -1,0 +1,14 @@
+Reinsurance Adjustment Register
+Prepared by: Claims finance
+
+Policy ID: POLICY-INS-780044
+Claimant: Irene Fowler
+Email: irene.fowler@claimmail.example
+Open reserve: $47,220.40
+Adjustment account: ACCT-INS-880114
+
+Policy ID: POLICY-INS-780118
+Claimant: Darren Cole
+Email: darren.cole@claimmail.example
+Open reserve: $58,904.19
+Adjustment account: ACCT-INS-880229

@@ -1,0 +1,14 @@
+Vendor Payables Closeout
+Business unit: Arbor Lane Retail
+
+Operating account: ACCT-SMB-112908
+Routing number: 021000021
+Accounts payable lead: Naomi Hart
+Email: naomi.hart@arborlane-example.com
+Outstanding vendor balance: $9,842.17
+
+Operating account: ACCT-SMB-113004
+Routing number: 031000503
+Accounts payable lead: Derek Flynn
+Email: derek.flynn@arborlane-example.com
+Outstanding vendor balance: $12,110.40

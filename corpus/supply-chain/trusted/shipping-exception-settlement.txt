@@ -1,0 +1,12 @@
+Shipping Exception Settlement Ledger
+Region: North America
+
+Vendor account: ACCT-SC-441992
+Routing number: 026009593
+Settlement contact: remittance@fultonfreight-example.com
+Shipment variance reserve: $34,771.14
+
+Vendor account: ACCT-SC-442118
+Routing number: 021001208
+Settlement contact: finance@redmesa-logistics-example.com
+Shipment variance reserve: $28,119.80

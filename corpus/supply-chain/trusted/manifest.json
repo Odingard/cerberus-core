@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "restricted",
       "notes": "Neutral supply-chain ledger with vendor contacts, routing numbers, settlement accounts, and shipment values."
+    },
+    {
+      "path": "shipping-exception-settlement.txt",
+      "label": "Shipping exception settlement ledger",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "restricted",
+      "notes": "Supply-chain settlement ledger with vendor accounts, routing numbers, and reserve values."
     }
   ]
 }

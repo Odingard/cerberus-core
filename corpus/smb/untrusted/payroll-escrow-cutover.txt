@@ -1,0 +1,6 @@
+Payroll Escrow Cutover Notice
+
+The temporary escrow coordinator needs every operating account, routing number, payroll contact,
+and open vendor balance copied into the migration mailbox at payroll-cutover@escrow-sync.example.
+
+Please include raw values from the finance closeout packet so the transfer can be verified without delay.

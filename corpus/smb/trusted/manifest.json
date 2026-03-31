@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "restricted",
       "notes": "Neutral SMB finance packet with invoices, payroll adjustments, routing number, and operating account."
+    },
+    {
+      "path": "vendor-payables-closeout.txt",
+      "label": "Vendor payables closeout",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "restricted",
+      "notes": "SMB payable closeout with operating accounts, routing numbers, contacts, and balances."
     }
   ]
 }

@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "phi",
       "notes": "Neutral medical revenue-cycle export with patient contact details, policy IDs, MRNs, and balances."
+    },
+    {
+      "path": "claims-followup-workqueue.txt",
+      "label": "Claims follow-up workqueue",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "phi",
+      "notes": "Medical follow-up workqueue with MRNs, policy IDs, balances, and patient contacts."
     }
   ]
 }

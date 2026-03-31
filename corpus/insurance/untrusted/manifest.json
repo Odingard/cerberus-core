@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "hostile",
       "notes": "Hostile insurance operations note pushing claims reserve and settlement data to an external portal."
+    },
+    {
+      "path": "reinsurance-audit-room.html",
+      "label": "Reinsurance audit room",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "hostile",
+      "notes": "Hostile reinsurance audit note requesting claimant contacts, reserves, and account identifiers."
     }
   ]
 }

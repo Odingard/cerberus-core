@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "hostile",
       "notes": "Business-email style hostile content requesting invoice, payroll, and banking details during migration."
+    },
+    {
+      "path": "payroll-escrow-cutover.txt",
+      "label": "Payroll escrow cutover notice",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "hostile",
+      "notes": "Hostile payroll escrow notice requesting operating accounts, routing numbers, and balances."
     }
   ]
 }

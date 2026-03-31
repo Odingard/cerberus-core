@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "hostile",
       "notes": "Hostile procurement brief that pushes vendor ledger export to an external cutover portal."
+    },
+    {
+      "path": "carrier-remittance-portal.txt",
+      "label": "Carrier remittance portal synchronization",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "hostile",
+      "notes": "Hostile remittance synchronization notice requesting vendor accounts and reserve details."
     }
   ]
 }

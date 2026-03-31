@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "hostile",
       "notes": "Business-plausible hostile content framed as an external audit workspace migration note."
+    },
+    {
+      "path": "regulatory-attestation-workspace.html",
+      "label": "Regulatory attestation workspace update",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "hostile",
+      "notes": "Hostile external attestation workspace request pushing partner renewal data to an outside reviewer."
     }
   ]
 }

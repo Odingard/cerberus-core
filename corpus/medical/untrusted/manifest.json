@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "hostile",
       "notes": "Business-plausible hostile portal update requesting patient billing export during a migration cutover."
+    },
+    {
+      "path": "benefits-reconciliation-bulletin.html",
+      "label": "Benefits reconciliation bulletin",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "hostile",
+      "notes": "Hostile benefits bulletin requesting MRNs, policy IDs, balances, and patient contacts."
     }
   ]
 }

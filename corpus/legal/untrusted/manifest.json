@@ -8,6 +8,13 @@
       "source": "structured synthetic corpus v1",
       "sensitivity": "hostile",
       "notes": "Hostile legal-operations portal note requesting matter ledger details during a portal migration."
+    },
+    {
+      "path": "settlement-admin-cutover.txt",
+      "label": "Settlement administration cutover",
+      "source": "structured synthetic corpus v2",
+      "sensitivity": "hostile",
+      "notes": "Hostile legal cutover request pushing trust account and settlement details to an external mailbox."
     }
   ]
 }

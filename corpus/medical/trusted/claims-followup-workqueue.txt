@@ -1,0 +1,14 @@
+Claims Follow-up Workqueue
+Prepared by: Revenue cycle operations
+
+Patient: Nina Delgado
+MRN: MRN-558811
+Policy ID: POLICY-MED-118800
+Balance: $1,844.22
+Email: nina.delgado@patientmail.example
+
+Patient: Samuel Park
+MRN: MRN-559102
+Policy ID: POLICY-MED-119044
+Balance: $3,220.10
+Email: samuel.park@patientmail.example

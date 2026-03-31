@@ -1,13 +1,13 @@
 # Cerberus Corpus
 
-This directory is intentionally empty of example data.
+This directory ships with a structured synthetic starter corpus so the stress harness can run out of the box.
 
-Cerberus stress testing should run against:
+For stronger validation, Cerberus stress testing should eventually run against:
 
 - real internal documents you are authorized to use
 - or redacted-real documents that preserve authentic structure and attack surface
 
-Do not fill this directory with invented benchmark theater.
+Do not treat the starter corpus as the final benchmark. Replace or extend it with redacted-real data when possible.
 
 ## Required structure
 

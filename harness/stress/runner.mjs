@@ -34,6 +34,15 @@ function preview(value) {
   return compact.length > 160 ? `${compact.slice(0, 157)}...` : compact;
 }
 
+function scenarioSlug(value) {
+  return path
+    .basename(String(value))
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
 function extractSensitiveLines(text) {
   const lines = String(text).split(/\r?\n/);
   const sensitivePattern =
@@ -150,28 +159,34 @@ async function discoverCorpus(corpusRoot, selectedVerticals) {
       continue;
     }
 
-    const trustedPath = trustedManifest.documents?.[0]?.path;
-    const untrustedPath = untrustedManifest.documents?.[0]?.path;
-    if (!trustedPath || !untrustedPath) {
+    const trustedDocs = trustedManifest.documents ?? [];
+    const untrustedDocs = untrustedManifest.documents ?? [];
+    if (trustedDocs.length === 0 || untrustedDocs.length === 0) {
       continue;
     }
-
-    const trustedFile = path.join(trustedDir, trustedPath);
-    const untrustedFile = path.join(untrustedDir, untrustedPath);
 
     const trustedFiles = await listFiles(trustedDir);
     const untrustedFiles = await listFiles(untrustedDir);
-    if (!trustedFiles.includes(trustedFile)) {
-      continue;
+
+    for (const trustedDoc of trustedDocs) {
+      const trustedFile = path.join(trustedDir, trustedDoc.path ?? '');
+      if (!trustedFiles.includes(trustedFile)) {
+        continue;
+      }
+      for (const untrustedDoc of untrustedDocs) {
+        const untrustedFile = path.join(untrustedDir, untrustedDoc.path ?? '');
+        if (!untrustedFiles.includes(untrustedFile)) {
+          continue;
+        }
+        corpus.push({
+          vertical,
+          trustedFile,
+          untrustedFile,
+          trustedLabel: trustedDoc.label ?? path.basename(trustedFile),
+          untrustedLabel: untrustedDoc.label ?? path.basename(untrustedFile),
+        });
+      }
     }
-    if (!untrustedFiles.includes(untrustedFile)) {
-      continue;
-    }
-    corpus.push({
-      vertical,
-      trustedFile,
-      untrustedFile,
-    });
   }
   return corpus;
 }
@@ -419,7 +434,7 @@ async function runScenario(definition) {
     );
 
     return {
-      scenarioId: `${definition.vertical}-${definition.level.id}-${definition.iteration}`,
+      scenarioId: `${definition.vertical}-${definition.level.id}-${scenarioSlug(definition.trustedFile)}-${scenarioSlug(definition.untrustedFile)}-${definition.iteration}`,
       iteration: definition.iteration,
       vertical: definition.vertical,
       level: definition.level.id,
@@ -429,6 +444,8 @@ async function runScenario(definition) {
       description: definition.level.description,
       trustedFile: definition.trustedFile,
       untrustedFile: definition.untrustedFile,
+      trustedLabel: definition.trustedLabel,
+      untrustedLabel: definition.untrustedLabel,
       passed:
         finalStep.blocked === definition.expectedBlocked && missingSignals.length === 0,
       finalBlocked: finalStep.blocked,
@@ -485,7 +502,7 @@ function summarize(results) {
 
   const scenarioGroups = new Map();
   for (const result of results) {
-    const key = `${result.vertical}:${result.level}:${result.technique}`;
+    const key = `${result.vertical}:${result.level}:${result.technique}:${result.trustedLabel}:${result.untrustedLabel}`;
     const existing = scenarioGroups.get(key);
     if (existing) {
       existing.push(result);

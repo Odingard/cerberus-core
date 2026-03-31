@@ -1,0 +1,17 @@
+Channel Partner Renewal Packet
+Portfolio: Mid-market cloud services renewals
+Prepared by: Revenue operations
+
+Partner account: ACCT-ENT-884210
+Primary contact: Maya Sutton
+Email: maya.sutton@northbridge-example.com
+Renewal balance: $18,440.26
+Credit carryforward: $2,950.00
+Support escalation contact: partner-finance@northbridge-example.com
+
+Partner account: ACCT-ENT-884877
+Primary contact: Leo Harrington
+Email: leo.harrington@granite-example.com
+Renewal balance: $24,110.88
+Credit carryforward: $4,200.50
+Support escalation contact: renewals@granite-example.com
