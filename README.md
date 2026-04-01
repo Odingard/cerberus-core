@@ -32,9 +32,24 @@ pip install cerberus-ai
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
+- [Verify Core Yourself](docs/verify-yourself.md)
 - [Core Live Attack Demo](https://odingard.github.io/cerberus-core/)
 - [Animated Core Demo Source](docs/demo.html)
 - [Demo Surface Strategy](docs/demo-surface-strategy.md)
+
+## Verify In Under A Minute
+
+```bash
+npm install
+npm run harness:action:report
+```
+
+Then open:
+
+- `test-results/action-harness-report.html`
+
+This runs the real `guard()` runtime against a compact set of control, attack,
+and observation scenarios and produces an operator-readable HTML report.
 
 ## TypeScript Quickstart
 

@@ -16,6 +16,20 @@ pip install cerberus-ai
 - Source lives in this repo at [docs/demo.html](./demo.html)
 - Best flow: run the control first, then run the protected attack, then open the live dashboard link from the demo header
 
+## Fastest Real Validation
+
+If you want to verify Core itself instead of only viewing the demo:
+
+```bash
+npm run harness:action:report
+```
+
+Then open:
+
+- `test-results/action-harness-report.html`
+
+For the larger sector benchmark, see [Verify Core Yourself](./verify-yourself.md).
+
 ## TypeScript Quickstart
 
 Create a file called `cerberus-test.ts`:
