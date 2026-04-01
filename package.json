@@ -29,6 +29,8 @@
     "bench": "npx tsx harness/bench.ts",
     "demo:capture": "npx tsx examples/demo-capture.ts",
     "validate:live": "npm run build && node examples/live-validation.mjs",
+    "validate:model": "npx tsx harness/validation/cli.ts",
+    "validate:model:report": "sh -c 'npm run validate:model -- \"$@\"; status=$?; node scripts/render-validation-report.mjs; exit $status' --",
     "validate:sink": "node examples/webhook-sink.mjs",
     "corpus:init": "node scripts/bootstrap-corpus.mjs",
     "corpus:check": "node scripts/validate-corpus.mjs",

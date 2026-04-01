@@ -33,6 +33,7 @@ pip install cerberus-ai
 
 - [Getting Started](docs/getting-started.md)
 - [Verify Core Yourself](docs/verify-yourself.md)
+- [Live Model Validation](docs/live-model-validation.md)
 - [Core Live Attack Demo](https://odingard.github.io/cerberus-core/)
 - [Animated Core Demo Source](docs/demo.html)
 - [Demo Surface Strategy](docs/demo-surface-strategy.md)

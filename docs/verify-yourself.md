@@ -71,4 +71,19 @@ enterprise-style execution.
 - The public demo is useful for first impression.
 - The action harness is the fastest proof path.
 - The stress harness is the deeper benchmark path.
+- The live model harness is the best path for provider-behavior evidence.
 - For the broadest credibility, use all three.
+
+## 6. Validate against a live model
+
+```bash
+npm run validate:model:report -- --provider openai --model gpt-4o-mini --trials 2 --control-trials 4 --detect
+```
+
+Then open:
+
+- `harness/validation-traces/latest-validation-report.html`
+
+More options:
+
+- [Live Model Validation](./live-model-validation.md)
