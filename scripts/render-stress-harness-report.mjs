@@ -17,7 +17,35 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function formatDuration(value) {
+  return `${Number(value ?? 0).toFixed(2)}ms`;
+}
+
+function formatRate(value) {
+  return `${(Number(value ?? 0) * 100).toFixed(1)}%`;
+}
+
 const report = JSON.parse(await readFile(inputPath, 'utf8'));
+const benignSummary = report.summary.benign ?? {
+  total: 0,
+  passed: 0,
+  failed: 0,
+  allowRate: 0,
+  falsePositiveRate: 0,
+};
+const attackSummary = report.summary.attacks ?? {
+  total: 0,
+  passed: 0,
+  failed: 0,
+  blockRate: 0,
+};
+const latencySummary = report.summary.latency ?? {
+  averageMs: 0,
+  p50Ms: 0,
+  p95Ms: 0,
+  maxMs: 0,
+  executionsPerSecond: 0,
+};
 
 const verticalRows = Object.entries(report.summary.byVertical)
   .map(
@@ -26,6 +54,8 @@ const verticalRows = Object.entries(report.summary.byVertical)
         <td>${escapeHtml(vertical)}</td>
         <td>${summary.passed}/${summary.total}</td>
         <td>${summary.averageScore.toFixed(2)}</td>
+        <td>${formatDuration(summary.averageDurationMs)}</td>
+        <td>${formatDuration(summary.p95DurationMs)}</td>
       </tr>`,
   )
   .join('');
@@ -36,7 +66,9 @@ const levelRows = Object.entries(report.summary.byLevel)
       <tr>
         <td>${escapeHtml(level)}</td>
         <td>${summary.passed}/${summary.total}</td>
-        <td>${(summary.passRate * 100).toFixed(1)}%</td>
+        <td>${formatRate(summary.passRate)}</td>
+        <td>${formatDuration(summary.averageDurationMs)}</td>
+        <td>${formatDuration(summary.p95DurationMs)}</td>
       </tr>`,
   )
   .join('');
@@ -47,8 +79,9 @@ const scenarioRows = Object.entries(report.summary.byScenario ?? {})
       <tr>
         <td>${escapeHtml(scenario)}</td>
         <td>${summary.passed}/${summary.total}</td>
-        <td>${(summary.passRate * 100).toFixed(1)}%</td>
+        <td>${formatRate(summary.passRate)}</td>
         <td>${summary.stable ? 'stable' : 'variable'}</td>
+        <td>${formatDuration(summary.averageDurationMs)}</td>
       </tr>`,
   )
   .join('');
@@ -124,21 +157,27 @@ const html = `<!doctype html>
         <div class="panel"><div>Total scenarios</div><h2>${report.summary.total}</h2></div>
         <div class="panel"><div>Passed</div><h2>${report.summary.passed}</h2></div>
         <div class="panel"><div>Failed</div><h2>${report.summary.failed}</h2></div>
-        <div class="panel"><div>Overall pass rate</div><h2>${(report.summary.passRate * 100).toFixed(1)}%</h2></div>
+        <div class="panel"><div>Overall pass rate</div><h2>${formatRate(report.summary.passRate)}</h2></div>
+        <div class="panel"><div>Benign allow rate</div><h2>${formatRate(benignSummary.allowRate)}</h2></div>
+        <div class="panel"><div>False-positive rate</div><h2>${formatRate(benignSummary.falsePositiveRate)}</h2></div>
+        <div class="panel"><div>Attack block rate</div><h2>${formatRate(attackSummary.blockRate)}</h2></div>
+        <div class="panel"><div>Avg guarded latency</div><h2>${formatDuration(latencySummary.averageMs)}</h2></div>
+        <div class="panel"><div>P95 guarded latency</div><h2>${formatDuration(latencySummary.p95Ms)}</h2></div>
+        <div class="panel"><div>Throughput</div><h2>${latencySummary.executionsPerSecond.toFixed(2)}/s</h2></div>
       </div>
     </section>
     <section class="grid">
       <section class="panel">
         <h2>By Vertical</h2>
         <table>
-          <thead><tr><th>Vertical</th><th>Pass Rate</th><th>Avg Score</th></tr></thead>
+          <thead><tr><th>Vertical</th><th>Pass Rate</th><th>Avg Score</th><th>Avg Latency</th><th>P95 Latency</th></tr></thead>
           <tbody>${verticalRows}</tbody>
         </table>
       </section>
       <section class="panel">
         <h2>By Difficulty Level</h2>
         <table>
-          <thead><tr><th>Level</th><th>Pass/Total</th><th>Rate</th></tr></thead>
+          <thead><tr><th>Level</th><th>Pass/Total</th><th>Rate</th><th>Avg Latency</th><th>P95 Latency</th></tr></thead>
           <tbody>${levelRows}</tbody>
         </table>
       </section>
@@ -146,7 +185,7 @@ const html = `<!doctype html>
     <section class="panel" style="margin-top: 18px;">
       <h2>Scenario Stability</h2>
       <table>
-        <thead><tr><th>Scenario</th><th>Pass/Total</th><th>Rate</th><th>Stability</th></tr></thead>
+        <thead><tr><th>Scenario</th><th>Pass/Total</th><th>Rate</th><th>Stability</th><th>Avg Latency</th></tr></thead>
         <tbody>${scenarioRows}</tbody>
       </table>
     </section>

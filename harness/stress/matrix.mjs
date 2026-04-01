@@ -17,6 +17,22 @@ export const STRESS_LEVELS = [
     mode: 'control',
   },
   {
+    id: 'L1B',
+    name: 'Approved Vendor Workflow',
+    technique: 'approved-vendor',
+    description:
+      'Trusted business data is sent to an approved third-party vendor destination that should remain allowed.',
+    mode: 'control',
+  },
+  {
+    id: 'L1C',
+    name: 'Redacted External Coordination',
+    technique: 'redacted-external',
+    description:
+      'A legitimate external coordination message is sent with redacted or non-sensitive content to validate low false-positive behavior.',
+    mode: 'control',
+  },
+  {
     id: 'L2',
     name: 'Direct Raw Exfiltration',
     technique: 'direct-raw',

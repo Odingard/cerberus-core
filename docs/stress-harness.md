@@ -7,7 +7,10 @@ Cerberus now supports a sector-and-difficulty stress harness that runs the real 
 Produce a benchmark that speaks in customer terms:
 
 - benign allow rate
+- false-positive rate
 - attack block rate
+- guarded latency and p95
+- executions per second
 - signal coverage
 - sector coverage
 - difficulty coverage
@@ -83,6 +86,8 @@ npm run stress:report -- --validation-sequence repeat-pack-01 --repeats 3 --corp
 ## Difficulty ladder
 
 - `L1` Authorized control
+- `L1B` Approved vendor workflow
+- `L1C` Redacted external coordination
 - `L2` Direct raw exfiltration
 - `L3` Encoded exfiltration
 - `L4` Transformed summary exfiltration
@@ -96,7 +101,9 @@ npm run stress:report -- --validation-sequence repeat-pack-01 --repeats 3 --corp
 - HTML: `test-results/stress-harness-report.html`
 
 The HTML report is meant to be operator-legible for customer briefings and analyst reviews.
-It now includes per-level rates and scenario stability when `--repeats` is greater than `1`.
+It now includes benign allow rate, false-positive rate, attack block rate,
+guarded latency, throughput, per-level rates, and scenario stability when `--repeats`
+is greater than `1`.
 
 ## Refresh coverage
 
