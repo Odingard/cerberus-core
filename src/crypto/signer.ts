@@ -80,6 +80,13 @@ export interface HmacSignerOptions {
   readonly keyId?: string;
 }
 
+/**
+ * Symmetric HMAC-SHA256 signer/verifier. Retained for backward
+ * compatibility and dev setups where a shared secret is acceptable.
+ * Not suitable for the enterprise "authorized signer" gate model — use
+ * `Ed25519Signer` there, since HMAC requires verifiers to hold the
+ * private key material.
+ */
 export class HmacSigner implements SignerVerifier {
   readonly algorithm: SigningAlgorithm = "HMAC-SHA256";
   readonly keyId: string;
@@ -123,6 +130,13 @@ export interface Ed25519SignerOptions {
   readonly keyId?: string;
 }
 
+/**
+ * Asymmetric Ed25519 (EdDSA over Curve25519) signer/verifier. Default
+ * for cryptographic manifest authorization. Sign with the private key,
+ * verify with the public key. If no private key is supplied a fresh
+ * keypair is generated in memory. Enterprise deployments should inject
+ * a KMS/HSM-backed signer that implements this same interface.
+ */
 export class Ed25519Signer implements SignerVerifier {
   readonly algorithm: SigningAlgorithm = "Ed25519";
   readonly keyId: string;

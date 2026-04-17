@@ -22,7 +22,7 @@ import { getDefaultSigner } from "../crypto/signer.js";
 
 /** Type guard — does `s` expose a `verify()` method? */
 function hasVerify(s: Signer | SignerVerifier): s is SignerVerifier {
-  return typeof (s as { verify?: unknown }).verify === "function";
+  return "verify" in s && typeof s.verify === "function";
 }
 
 // ── Types ───────────────────────────────────────────────────────────
