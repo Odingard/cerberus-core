@@ -19,13 +19,14 @@ export type {
   CrossAgentTrifectaSignal,
   ContextContaminationSignal,
   UnauthorizedAgentSpawnSignal,
+  ManifestSignatureInvalidSignal,
   ToolDescription,
   ToolPoisoningResult,
   DetectionSignal,
   RiskVector,
   RiskAction,
   RiskAssessment,
-} from './signals.js';
+} from "./signals.js";
 
 export type {
   AlertMode,
@@ -40,8 +41,8 @@ export type {
   OverflowAction,
   AlwaysInspectRegions,
   CerberusConfig,
-} from './config.js';
+} from "./config.js";
 
-export type { ToolCallContext } from './context.js';
-export type { ToolExecutionPhase, ToolExecutionOutcome } from './execution.js';
-export type { IntelligenceIncidentEnvelope } from './intelligence.js';
+export type { ToolCallContext } from "./context.js";
+export type { ToolExecutionPhase, ToolExecutionOutcome } from "./execution.js";
+export type { IntelligenceIncidentEnvelope } from "./intelligence.js";

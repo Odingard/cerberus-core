@@ -6,37 +6,44 @@
  * if the action is 'interrupt'.
  */
 
-import type { CerberusConfig } from '../types/config.js';
-import type { DetectionSignal, RiskAssessment } from '../types/signals.js';
-import type { ToolCallContext } from '../types/context.js';
-import type { ToolExecutionOutcome } from '../types/execution.js';
-import { formatBlockedToolMessage } from '../types/execution.js';
-import type { DetectionSession } from './session.js';
-import { recordSignal } from './session.js';
-import { classifyDataSource, resolveTrustLevel } from '../layers/l1-classifier.js';
-import { tagTokenProvenance } from '../layers/l2-tagger.js';
-import { classifyOutboundIntent } from '../layers/l3-classifier.js';
-import { checkMemoryContamination } from '../layers/l4-memory.js';
-import type { MemoryToolConfig } from '../layers/l4-memory.js';
-import type { ContaminationGraph } from '../graph/contamination.js';
-import type { ProvenanceLedger } from '../graph/ledger.js';
-import { assessRisk } from './correlation.js';
-import { detectSecretsInResult } from '../classifiers/secrets-detector.js';
-import { scanInjectionInResult } from '../classifiers/injection-scanner.js';
-import { detectEncodingInResult } from '../classifiers/encoding-detector.js';
-import { classifyOutboundDomain } from '../classifiers/domain-classifier.js';
-import { checkToolCallPoisoning } from '../classifiers/mcp-scanner.js';
-import { detectBehavioralDrift } from '../classifiers/drift-detector.js';
-import { detectInjectionCorrelatedOutbound } from '../classifiers/outbound-correlator.js';
-import { detectToolChainExfiltration } from '../classifiers/tool-chain-detector.js';
-import { detectOutboundEncoding } from '../classifiers/outbound-encoding-detector.js';
-import { detectSplitExfiltration } from '../classifiers/split-exfiltration-detector.js';
-import { analyzeContextWindow } from './context-window.js';
-import { detectCrossAgentTrifecta, detectContextContamination } from './cross-agent-correlation.js';
-import { buildRiskVector } from './correlation.js';
-import { updateAgentRiskState } from '../graph/delegation.js';
-import { recordToolCall } from '../telemetry/otel.js';
-import { collectToolResult } from './streaming.js';
+import type { CerberusConfig } from "../types/config.js";
+import type { DetectionSignal, RiskAssessment } from "../types/signals.js";
+import type { ToolCallContext } from "../types/context.js";
+import type { ToolExecutionOutcome } from "../types/execution.js";
+import { formatBlockedToolMessage } from "../types/execution.js";
+import type { DetectionSession } from "./session.js";
+import { recordSignal } from "./session.js";
+import {
+  classifyDataSource,
+  resolveTrustLevel,
+} from "../layers/l1-classifier.js";
+import { tagTokenProvenance } from "../layers/l2-tagger.js";
+import { classifyOutboundIntent } from "../layers/l3-classifier.js";
+import { checkMemoryContamination } from "../layers/l4-memory.js";
+import type { MemoryToolConfig } from "../layers/l4-memory.js";
+import type { ContaminationGraph } from "../graph/contamination.js";
+import type { ProvenanceLedger } from "../graph/ledger.js";
+import { assessRisk } from "./correlation.js";
+import { detectSecretsInResult } from "../classifiers/secrets-detector.js";
+import { scanInjectionInResult } from "../classifiers/injection-scanner.js";
+import { detectEncodingInResult } from "../classifiers/encoding-detector.js";
+import { classifyOutboundDomain } from "../classifiers/domain-classifier.js";
+import { checkToolCallPoisoning } from "../classifiers/mcp-scanner.js";
+import { detectBehavioralDrift } from "../classifiers/drift-detector.js";
+import { detectInjectionCorrelatedOutbound } from "../classifiers/outbound-correlator.js";
+import { detectToolChainExfiltration } from "../classifiers/tool-chain-detector.js";
+import { detectOutboundEncoding } from "../classifiers/outbound-encoding-detector.js";
+import { detectSplitExfiltration } from "../classifiers/split-exfiltration-detector.js";
+import { analyzeContextWindow } from "./context-window.js";
+import {
+  detectCrossAgentTrifecta,
+  detectContextContamination,
+} from "./cross-agent-correlation.js";
+import { buildRiskVector } from "./correlation.js";
+import { updateAgentRiskState } from "../graph/delegation.js";
+import { verifyManifestBeforeTurn } from "./manifest-gate.js";
+import { recordToolCall } from "../telemetry/otel.js";
+import { collectToolResult } from "./streaming.js";
 
 /** Tool result shapes Cerberus can reconstruct into a full inspected string. */
 export type ToolExecutorResult =
@@ -46,7 +53,9 @@ export type ToolExecutorResult =
   | Iterable<string | Uint8Array>;
 
 /** Raw tool executor input signature before Cerberus reconstructs the result. */
-export type RawToolExecutorFn = (args: Record<string, unknown>) => Promise<ToolExecutorResult>;
+export type RawToolExecutorFn = (
+  args: Record<string, unknown>,
+) => Promise<ToolExecutorResult>;
 
 /** Generic wrapped tool executor function signature. */
 export type ToolExecutorFn = (args: Record<string, unknown>) => Promise<string>;
@@ -54,7 +63,9 @@ export type ToolExecutorFn = (args: Record<string, unknown>) => Promise<string>;
 /** Callback invoked with the full risk assessment after each tool call. */
 export type OnFullAssessmentCallback = (assessment: RiskAssessment) => void;
 /** Callback invoked with structured execution metadata after each tool call. */
-export type OnExecutionOutcomeCallback = (outcome: ToolExecutionOutcome) => void;
+export type OnExecutionOutcomeCallback = (
+  outcome: ToolExecutionOutcome,
+) => void;
 
 /**
  * Create an intercepted version of a tool executor.
@@ -92,7 +103,7 @@ export function interceptToolCall(
     startMs: number,
     signals: readonly DetectionSignal[],
     executorRan: boolean,
-    phase: ToolExecutionOutcome['phase'],
+    phase: ToolExecutionOutcome["phase"],
   ): ToolExecutionOutcome => {
     onFullAssessment?.(assessment);
     config.onAssessment?.({
@@ -108,7 +119,7 @@ export function interceptToolCall(
       toolName,
       action: assessment.action,
       score: assessment.score,
-      blocked: assessment.action === 'interrupt',
+      blocked: assessment.action === "interrupt",
       executorRan,
       phase,
     };
@@ -138,8 +149,15 @@ export function interceptToolCall(
     return allSessionSignals;
   };
 
-  const correlateCrossAgentSignals = (turnId: string, signals: DetectionSignal[]): void => {
-    if (config.multiAgent !== true || !session.delegationGraph || !session.currentAgentId) {
+  const correlateCrossAgentSignals = (
+    turnId: string,
+    signals: DetectionSignal[],
+  ): void => {
+    if (
+      config.multiAgent !== true ||
+      !session.delegationGraph ||
+      !session.currentAgentId
+    ) {
       return;
     }
 
@@ -166,7 +184,11 @@ export function interceptToolCall(
       recordSignal(session, trifectaSignal);
     }
 
-    const contaminationSignal = detectContextContamination(delegationGraph, currentAgentId, turnId);
+    const contaminationSignal = detectContextContamination(
+      delegationGraph,
+      currentAgentId,
+      turnId,
+    );
     if (contaminationSignal) {
       signals.push(contaminationSignal);
       recordSignal(session, contaminationSignal);
@@ -177,10 +199,43 @@ export function interceptToolCall(
     // Generate turn ID
     const turnIndex = session.turnCounter;
     session.turnCounter += 1;
-    const turnId = `turn-${String(turnIndex).padStart(3, '0')}`;
+    const turnId = `turn-${String(turnIndex).padStart(3, "0")}`;
 
     // Record wall time including tool execution (used for OTel span)
     const startMs = Date.now();
+
+    // Per-turn EGI gate: verify the signed manifest before any detection
+    // layer or executor runs. A failed signature = cryptographic
+    // authorization failure → BLOCKED, not a soft signal. This is what
+    // makes "no valid signature → no state transition" a real gate.
+    if (session.delegationGraph) {
+      const manifestSignal = verifyManifestBeforeTurn(
+        session.delegationGraph,
+        session.sessionId,
+        turnId,
+      );
+      if (manifestSignal) {
+        recordSignal(session, manifestSignal);
+        const gateSignals: DetectionSignal[] = [manifestSignal];
+        const gateAssessment: RiskAssessment = {
+          turnId,
+          vector: { l1: true, l2: true, l3: true, l4: true },
+          score: 4,
+          action: "interrupt",
+          signals: gateSignals,
+          timestamp: Date.now(),
+        };
+        const gateOutcome = finalizeAssessment(
+          gateAssessment,
+          turnId,
+          startMs,
+          gateSignals,
+          false,
+          "preflight",
+        );
+        return formatBlockedToolMessage(gateOutcome);
+      }
+    }
 
     if (isOutboundTool) {
       const ctx: ToolCallContext = {
@@ -188,7 +243,7 @@ export function interceptToolCall(
         sessionId: session.sessionId,
         toolName,
         toolArguments: args,
-        toolResult: '',
+        toolResult: "",
         timestamp: Date.now(),
       };
 
@@ -233,7 +288,11 @@ export function interceptToolCall(
         recordSignal(session, toolChainSignal);
       }
 
-      const outboundEncodingSignal = detectOutboundEncoding(ctx, session, outboundTools);
+      const outboundEncodingSignal = detectOutboundEncoding(
+        ctx,
+        session,
+        outboundTools,
+      );
       if (outboundEncodingSignal) {
         signals.push(outboundEncodingSignal);
         recordSignal(session, outboundEncodingSignal);
@@ -265,23 +324,35 @@ export function interceptToolCall(
 
       correlateCrossAgentSignals(turnId, signals);
 
-      const assessment = assessRisk(turnId, signals, config, collectAllSessionSignals());
+      const assessment = assessRisk(
+        turnId,
+        signals,
+        config,
+        collectAllSessionSignals(),
+      );
 
-      if (assessment.action === 'interrupt') {
+      if (assessment.action === "interrupt") {
         const blockedOutcome = finalizeAssessment(
           assessment,
           turnId,
           startMs,
           signals,
           false,
-          'preflight',
+          "preflight",
         );
         return formatBlockedToolMessage(blockedOutcome);
       }
 
       const rawResult = await executor(args);
       const result = await collectToolResult(rawResult, config);
-      finalizeAssessment(assessment, turnId, startMs, signals, true, 'preflight');
+      finalizeAssessment(
+        assessment,
+        turnId,
+        startMs,
+        signals,
+        true,
+        "preflight",
+      );
       return result;
     }
 
@@ -303,7 +374,9 @@ export function interceptToolCall(
     const contextResult = analyzeContextWindow(result, turnId, config);
 
     // Determine which content to scan — use inspected content if overflow occurred
-    const scanContent = contextResult.overflow ? contextResult.inspectedContent : result;
+    const scanContent = contextResult.overflow
+      ? contextResult.inspectedContent
+      : result;
 
     // If context window manager blocked the scan entirely, skip the pipeline
     if (contextResult.blocked) {
@@ -313,14 +386,19 @@ export function interceptToolCall(
         recordSignal(session, contextResult.signal);
       }
 
-      const assessment = assessRisk(turnId, signals, config, collectAllSessionSignals());
+      const assessment = assessRisk(
+        turnId,
+        signals,
+        config,
+        collectAllSessionSignals(),
+      );
       const outcome = finalizeAssessment(
         assessment,
         turnId,
         startMs,
         signals,
         true,
-        'context-window',
+        "context-window",
       );
 
       if (outcome.blocked) {
@@ -345,8 +423,8 @@ export function interceptToolCall(
     }
 
     const trustLevel = resolveTrustLevel(toolName, trustOverrides);
-    const isTrusted = trustLevel === 'trusted';
-    const isUntrusted = trustLevel === 'untrusted';
+    const isTrusted = trustLevel === "trusted";
+    const isUntrusted = trustLevel === "untrusted";
 
     // L1: Data source classification (uses scanCtx for content-aware scanning)
     const l1Signal = classifyDataSource(scanCtx, trustOverrides, session);
@@ -370,13 +448,21 @@ export function interceptToolCall(
     }
 
     // L2 sub-classifiers: Injection scanner + Encoding detector (run when untrusted)
-    const injectionSignal = scanInjectionInResult(scanCtx, session, isUntrusted);
+    const injectionSignal = scanInjectionInResult(
+      scanCtx,
+      session,
+      isUntrusted,
+    );
     if (injectionSignal) {
       signals.push(injectionSignal);
       recordSignal(session, injectionSignal);
     }
 
-    const encodingSignal = detectEncodingInResult(scanCtx, session, isUntrusted);
+    const encodingSignal = detectEncodingInResult(
+      scanCtx,
+      session,
+      isUntrusted,
+    );
     if (encodingSignal) {
       signals.push(encodingSignal);
       recordSignal(session, encodingSignal);
@@ -384,7 +470,11 @@ export function interceptToolCall(
 
     // L2 sub-classifier: MCP tool poisoning (runs when toolDescriptions configured)
     if (config.toolDescriptions && config.toolDescriptions.length > 0) {
-      const poisoningSignal = checkToolCallPoisoning(scanCtx, config.toolDescriptions, session);
+      const poisoningSignal = checkToolCallPoisoning(
+        scanCtx,
+        config.toolDescriptions,
+        session,
+      );
       if (poisoningSignal) {
         signals.push(poisoningSignal);
         recordSignal(session, poisoningSignal);
@@ -436,7 +526,11 @@ export function interceptToolCall(
     }
 
     // L3 sub-classifier: Outbound encoding detector — catches encoded payloads in outbound args
-    const outboundEncodingSignal = detectOutboundEncoding(ctx, session, outboundTools);
+    const outboundEncodingSignal = detectOutboundEncoding(
+      ctx,
+      session,
+      outboundTools,
+    );
     if (outboundEncodingSignal) {
       signals.push(outboundEncodingSignal);
       recordSignal(session, outboundEncodingSignal);
@@ -457,7 +551,13 @@ export function interceptToolCall(
 
     // L4: Memory contamination detection (optional — skip if not configured)
     if (graph && ledger && memoryTools && memoryTools.length > 0) {
-      const l4Signal = checkMemoryContamination(ctx, memoryTools, graph, ledger, trustLevel);
+      const l4Signal = checkMemoryContamination(
+        ctx,
+        memoryTools,
+        graph,
+        ledger,
+        trustLevel,
+      );
       if (l4Signal) {
         signals.push(l4Signal);
         recordSignal(session, l4Signal);
@@ -481,14 +581,19 @@ export function interceptToolCall(
     correlateCrossAgentSignals(turnId, signals);
 
     // Correlate: vector/score from cumulative session signals, turn signals for inspection
-    const assessment = assessRisk(turnId, signals, config, collectAllSessionSignals());
+    const assessment = assessRisk(
+      turnId,
+      signals,
+      config,
+      collectAllSessionSignals(),
+    );
     const outcome = finalizeAssessment(
       assessment,
       turnId,
       startMs,
       signals,
       true,
-      'post-execution',
+      "post-execution",
     );
 
     // If action is interrupt, return blocked message

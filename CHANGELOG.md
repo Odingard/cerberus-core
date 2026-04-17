@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-17
+
+### Added
+
+- **EGI Execution Gate** — per-turn manifest verification is now a hard
+  authorization gate. A failed signature check returns `BLOCKED` with the
+  `MANIFEST_SIGNATURE_INVALID` signal _before_ any detection layer or tool
+  executor runs. "No valid signature → no state transition" is now a
+  cryptographic gate, not a soft violation.
+  - New `src/engine/manifest-gate.ts` exporting `verifyManifestBeforeTurn()`
+    which distinguishes four failure modes (`ALGORITHM_MISMATCH`,
+    `KEY_ID_MISMATCH`, `SIGNATURE_MISMATCH`, `VERIFIER_MISSING`).
+  - New `INTEGRITY` signal layer (`src/types/signals.ts`) carrying the
+    `ManifestSignatureInvalidSignal` type.
+  - `src/engine/correlation.ts` saturates all four risk bits when it sees
+    an `INTEGRITY` signal so the threshold never lets a bad manifest
+    through.
+  - Interceptor (`src/engine/interceptor.ts`) runs the gate first for any
+    session that carries a signed delegation graph.
+  - `src/graph/delegation.ts` exports `getGraphVerifier()` so the gate can
+    distinguish "no verifier bound" from "verifier rejected" for audit.
+- **Strict late-registration mode (Python)** — `EGIEngine` now supports
+  `strict_amendment=True`. In strict mode the runtime will _not_ re-sign
+  its own late-tool amendment; the caller must sign the preview payload
+  with an authorized signer out-of-band and pass the signature back via
+  `amendment_signature=`.
+  - New `EGIEngine.preview_amendment_payload(tool_name, current_turn,
+    tool_schema=, ...)` — returns the canonical payload to be signed. Pure,
+    non-mutating.
+  - New deterministic `_derive_amendment_node_id()` (uuid5 over
+    `(graph_id, tool_name, current_turn)`) so the preview and the actual
+    amendment produce byte-identical payloads.
+  - `register_tool_late()` now accepts `amendment_signature=`; when strict
+    mode is on and the signature is missing or from a different key, the
+    amendment is refused and the graph is rolled back. The legacy
+    self-sign path remains the default for one minor release.
+  - 5 new Python tests in `TestStrictAmendment`
+    (`sdk/python/tests/unit/test_egi_signer.py`) — 171 Python tests
+    total.
+- **End-to-end EGI gate harness** — new
+  `harness/validation/egi-gate.ts` drives six scenarios against the
+  actual runtime (legitimate, tamper, forgery, algorithm-forgery,
+  unsigned amendment refused, forged-amendment refused, signed
+  amendment accepted, blocked L2-active re-registration) and writes a
+  single machine-readable report to `reports/egi-gate-demo.json`. Run
+  with `npx tsx harness/validation/egi-gate.ts`.
+- 7 new TypeScript tests in `tests/engine/manifest-gate.test.ts`
+  covering every verification outcome. 963 TypeScript tests total.
+
+### Changed
+
+- `src/types/index.ts` now re-exports `ManifestSignatureInvalidSignal`.
+- `src/index.ts` now re-exports `verifyManifestBeforeTurn` and
+  `getGraphVerifier` so host applications can reproduce the per-turn
+  gate check out-of-band (e.g. in a gateway).
+
+### Security
+
+- Closes the runtime self-re-sign trapdoor on late tool registration
+  (Python SDK, strict mode). Previously any legitimate late-tool add
+  could be silently re-signed by the same runtime that added it,
+  defeating tamper-evidence. In strict mode the authority must sign the
+  amendment out-of-band; without it, the amendment is refused.
+- A failed manifest verification now halts execution instead of merely
+  emitting a signal. Any agent loop that trusted Cerberus to block when
+  the manifest was tampered will now actually block.
+
 ## [1.2.1] - 2026-04-17
 
 ### Fixed

@@ -30,6 +30,7 @@ export type {
   CrossAgentTrifectaSignal,
   ContextContaminationSignal,
   UnauthorizedAgentSpawnSignal,
+  ManifestSignatureInvalidSignal,
   ToolDescription,
   ToolPoisoningResult,
   DetectionSignal,
@@ -94,6 +95,9 @@ export type {
   DelegationGraph,
 } from "./graph/delegation.js";
 export type { ToolExecutorFn } from "./engine/interceptor.js";
+
+// Cryptographic authorization gate (verifies signed manifest per turn)
+export { verifyManifestBeforeTurn } from "./engine/manifest-gate.js";
 
 // Dynamic tool registration
 export {

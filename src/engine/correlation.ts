@@ -12,8 +12,8 @@ import type {
   RiskVector,
   RiskAction,
   RiskAssessment,
-} from '../types/signals.js';
-import type { CerberusConfig } from '../types/config.js';
+} from "../types/signals.js";
+import type { CerberusConfig } from "../types/config.js";
 
 /** Default risk score threshold to trigger the configured alert mode. */
 const DEFAULT_THRESHOLD = 3;
@@ -22,7 +22,9 @@ const DEFAULT_THRESHOLD = 3;
  * Build the 4-bit risk vector from a set of signals.
  * Each bit is true if at least one signal from that layer is present.
  */
-export function buildRiskVector(signals: readonly DetectionSignal[]): RiskVector {
+export function buildRiskVector(
+  signals: readonly DetectionSignal[],
+): RiskVector {
   let l1 = false;
   let l2 = false;
   let l3 = false;
@@ -30,23 +32,32 @@ export function buildRiskVector(signals: readonly DetectionSignal[]): RiskVector
 
   for (const signal of signals) {
     switch (signal.layer) {
-      case 'L1':
+      case "L1":
         l1 = true;
         break;
-      case 'L2':
+      case "L2":
         l2 = true;
         break;
-      case 'L3':
+      case "L3":
         l3 = true;
         break;
-      case 'L4':
+      case "L4":
         l4 = true;
         break;
-      case 'CROSS_AGENT':
+      case "CROSS_AGENT":
         // Cross-agent trifecta implies all three layers are active
         l1 = true;
         l2 = true;
         l3 = true;
+        break;
+      case "INTEGRITY":
+        // A failed manifest signature is a cryptographic authorization
+        // failure — saturate every layer so the score forces interruption
+        // regardless of the configured threshold.
+        l1 = true;
+        l2 = true;
+        l3 = true;
+        l4 = true;
         break;
     }
   }
@@ -68,12 +79,15 @@ export function computeScore(vector: RiskVector): number {
  * If score meets or exceeds the threshold, the action is
  * the configured alertMode (default: 'alert').
  */
-export function resolveAction(score: number, config: CerberusConfig): RiskAction {
+export function resolveAction(
+  score: number,
+  config: CerberusConfig,
+): RiskAction {
   const threshold = config.threshold ?? DEFAULT_THRESHOLD;
-  const alertMode = config.alertMode ?? 'alert';
+  const alertMode = config.alertMode ?? "alert";
 
   if (score < threshold) {
-    return 'none';
+    return "none";
   }
 
   return alertMode;

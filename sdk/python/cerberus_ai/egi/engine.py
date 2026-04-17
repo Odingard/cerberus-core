@@ -187,9 +187,16 @@ class EGIEngine:
         *,
         signer: Signer | None = None,
         verifier: Verifier | None = None,
+        strict_amendment: bool = False,
     ) -> None:
         self._session_id = session_id
         self._agent_id = agent_id
+        # Strict mode: the runtime is NOT allowed to self-re-sign a late
+        # amendment. Callers must supply a signature produced out-of-band
+        # (typically by an enterprise gateway / KMS-backed authority) via
+        # ``register_tool_late(..., amendment_signature=...)``. This is the
+        # "runtime cannot silently expand its own authority" rule.
+        self._strict_amendment = strict_amendment
 
         if signer is not None:
             self._signer: Signer = signer
@@ -308,6 +315,74 @@ class EGIEngine:
 
         return violations
 
+    def _derive_amendment_node_id(self, tool_name: str, current_turn: int) -> str:
+        """Derive a deterministic node_id for a late amendment.
+
+        Both :meth:`preview_amendment_payload` and :meth:`register_tool_late`
+        must produce the *same* canonical payload for the same amendment —
+        otherwise the out-of-band signature would verify against the preview
+        but not against the payload the engine actually constructs. Using a
+        uuid5 derivation keeps the id stable for a given
+        ``(graph_id, tool_name, current_turn)``.
+        """
+        ns = uuid.uuid5(uuid.NAMESPACE_URL, f"cerberus-egi:{self._graph.graph_id}")
+        return str(uuid.uuid5(ns, f"{tool_name}:{current_turn}"))
+
+    def preview_amendment_payload(
+        self,
+        tool: ToolSchema,
+        reason: str,
+        authorized_by: str,
+        current_turn: int,
+        l2_active: bool = False,
+    ) -> str:
+        """
+        Return the exact canonical payload an authority must sign to
+        register ``tool`` late.
+
+        Used by strict deployments (``strict_amendment=True``): the runtime
+        calls this, ships the payload to an out-of-band signer (gateway /
+        KMS), and then passes the resulting signature into
+        :meth:`register_tool_late` as ``amendment_signature``. The runtime
+        itself never signs.
+
+        Does not mutate engine state — purely derives what the post-amend
+        manifest would look like.
+        """
+        preview_node = EGINode(
+            node_id=self._derive_amendment_node_id(tool.name, current_turn),
+            tool_name=tool.name,
+            description=tool.description,
+            schema_fingerprint=_schema_fingerprint(tool),
+            is_network_capable=tool.is_network_capable,
+            is_data_read=tool.is_data_read,
+            is_data_write=tool.is_data_write,
+        )
+        preview_record = LateRegistrationRecord(
+            tool_name=tool.name,
+            reason=reason,
+            authorized_by=authorized_by,
+            registered_at_turn=current_turn,
+            l2_active_at_registration=l2_active,
+            node_id="" if l2_active else preview_node.node_id,
+        )
+        preview_nodes = list(self._graph.nodes)
+        if not l2_active:
+            preview_nodes.append(preview_node)
+        preview_graph = EGIGraph(
+            graph_id=self._graph.graph_id,
+            session_id=self._graph.session_id,
+            agent_id=self._graph.agent_id,
+            nodes=preview_nodes,
+            edges=list(self._graph.edges),
+            initialized_at=self._graph.initialized_at,
+            manifest_version=self._graph.manifest_version,
+            algorithm=self._graph.algorithm,
+            key_id=self._graph.key_id,
+            late_registrations=[*self._graph.late_registrations, preview_record],
+        )
+        return preview_graph.signing_payload()
+
     def register_tool_late(
         self,
         tool: ToolSchema,
@@ -315,19 +390,52 @@ class EGIEngine:
         authorized_by: str,
         current_turn: int,
         l2_active: bool = False,
+        *,
+        amendment_signature: str | None = None,
     ) -> tuple[bool, str]:
         """
         Register a tool after initialization via the controlled late-binding hook.
 
-        Returns (success, message).
-        Injection-assisted registration (L2 active) is blocked.
+        Returns ``(success, message)``.
 
-        NOTE — this path re-signs the graph in-process with the same signer.
-        In "strict" deployments (enterprise gateway, FedRAMP), late
-        registrations must instead be signed out-of-band by a key holder;
-        see ``docs/egi-signed-manifests.md``. Enforcement of that policy
-        lands with the gateway manifest-signing service.
+        Two modes:
+
+        * **Permissive** (default, ``strict_amendment=False``): the engine
+          re-signs the graph in-process with ``self._signer``. Convenient
+          for OSS / dev, but the runtime itself is capable of expanding
+          its own authority.
+        * **Strict** (``strict_amendment=True``): the runtime refuses to
+          self-sign. The caller must first call
+          :meth:`preview_amendment_payload`, sign it out-of-band with an
+          authorized signer (gateway / KMS), and pass the hex signature
+          here via ``amendment_signature``. The signature is verified
+          against ``self._verifier`` before mutation — any mismatch is a
+          hard refusal.
+
+        Injection-assisted registration (``l2_active=True``) is always
+        blocked; the rejection is still added to the signed ledger as
+        evidence, but in strict mode that ledger update itself also
+        requires an authorized ``amendment_signature``.
         """
+        def _apply_new_signature(payload: str) -> tuple[bool, str]:
+            if self._strict_amendment:
+                if amendment_signature is None:
+                    return False, (
+                        "STRICT_AMENDMENT_REQUIRED: signed amendment missing. "
+                        "Obtain a signature over preview_amendment_payload(...) "
+                        "from an authorized signer and pass it as "
+                        "amendment_signature=."
+                    )
+                if not self._verifier.verify(payload, amendment_signature):
+                    return False, (
+                        "STRICT_AMENDMENT_INVALID: supplied amendment_signature "
+                        "did not verify against the configured authority key."
+                    )
+                self._graph.signature = amendment_signature
+                return True, ""
+            self._graph.signature = self._signer.sign(payload)
+            return True, ""
+
         if l2_active:
             record = LateRegistrationRecord(
                 tool_name=tool.name,
@@ -338,18 +446,17 @@ class EGIEngine:
                 node_id="",
             )
             self._graph.late_registrations.append(record)
-            # The blocked-registration record is evidence and belongs in
-            # the signed ledger. Re-sign so subsequent verify_graph_integrity
-            # / check_turn calls do not mis-report a tampering failure.
-            self._graph.signature = self._signer.sign(self._graph.signing_payload())
+            ok, err = _apply_new_signature(self._graph.signing_payload())
+            if not ok:
+                self._graph.late_registrations.pop()
+                return False, err
             return False, (
                 f"INJECTION_ASSISTED_REGISTRATION: Tool '{tool.name}' registration blocked — "
                 "L2 injection active at registration time"
             )
 
-        # Add to graph (requires re-signing)
         node = EGINode(
-            node_id=str(uuid.uuid4()),
+            node_id=self._derive_amendment_node_id(tool.name, current_turn),
             tool_name=tool.name,
             description=tool.description,
             schema_fingerprint=_schema_fingerprint(tool),
@@ -357,8 +464,6 @@ class EGIEngine:
             is_data_read=tool.is_data_read,
             is_data_write=tool.is_data_write,
         )
-        self._graph.nodes.append(node)
-        self._nodes_by_name[tool.name] = node
         record = LateRegistrationRecord(
             tool_name=tool.name,
             reason=reason,
@@ -367,9 +472,15 @@ class EGIEngine:
             l2_active_at_registration=False,
             node_id=node.node_id,
         )
+        self._graph.nodes.append(node)
+        self._nodes_by_name[tool.name] = node
         self._graph.late_registrations.append(record)
-        # Re-sign the updated graph (ledger now covers this amendment)
-        self._graph.signature = self._signer.sign(self._graph.signing_payload())
+        ok, err = _apply_new_signature(self._graph.signing_payload())
+        if not ok:
+            self._graph.nodes.pop()
+            self._nodes_by_name.pop(tool.name, None)
+            self._graph.late_registrations.pop()
+            return False, err
         return True, f"Tool '{tool.name}' successfully registered and added to EGI graph"
 
     @property

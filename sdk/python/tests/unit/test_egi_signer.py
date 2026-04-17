@@ -271,3 +271,137 @@ class TestEGIEngineSignedManifest:
         # trying to verify against their own key.
         engine._verifier = b
         assert engine.verify_graph_integrity() is False
+
+
+class TestStrictAmendment:
+    def test_strict_without_signature_refuses(
+        self, declared_tools: list[ToolSchema]
+    ) -> None:
+        """In strict mode the runtime must refuse to self-re-sign."""
+        engine = EGIEngine(
+            "session-1",
+            "agent-1",
+            declared_tools,
+            strict_amendment=True,
+        )
+        ok, msg = engine.register_tool_late(
+            _tool("browse", network=True, read=True),
+            reason="tool-use",
+            authorized_by="tester",
+            current_turn=1,
+        )
+        assert ok is False
+        assert "STRICT_AMENDMENT_REQUIRED" in msg
+        # Manifest must still verify under its original signature.
+        assert engine.verify_graph_integrity() is True
+        assert "browse" not in engine.registered_tools
+
+    def test_strict_with_valid_signature_accepts(
+        self, declared_tools: list[ToolSchema]
+    ) -> None:
+        """Caller obtains a signature out-of-band, supplies it, engine accepts."""
+        authority = Ed25519Signer()
+        engine = EGIEngine(
+            "session-1",
+            "agent-1",
+            declared_tools,
+            signer=authority,
+            strict_amendment=True,
+        )
+        tool = _tool("browse", network=True, read=True)
+        payload = engine.preview_amendment_payload(
+            tool, reason="tool-use", authorized_by="tester", current_turn=1
+        )
+        # Authority signs the preview — in production this round-trips
+        # to a gateway / KMS; here we sign in-test.
+        amendment_sig = authority.sign(payload)
+        ok, msg = engine.register_tool_late(
+            tool,
+            reason="tool-use",
+            authorized_by="tester",
+            current_turn=1,
+            amendment_signature=amendment_sig,
+        )
+        assert ok is True, msg
+        assert "browse" in engine.registered_tools
+        assert engine.verify_graph_integrity() is True
+
+    def test_strict_rejects_forged_signature(
+        self, declared_tools: list[ToolSchema]
+    ) -> None:
+        """A signature from a different key must be rejected."""
+        authority = Ed25519Signer()
+        attacker = Ed25519Signer()
+        engine = EGIEngine(
+            "session-1",
+            "agent-1",
+            declared_tools,
+            signer=authority,
+            strict_amendment=True,
+        )
+        tool = _tool("browse", network=True, read=True)
+        payload = engine.preview_amendment_payload(
+            tool, reason="tool-use", authorized_by="tester", current_turn=1
+        )
+        forged = attacker.sign(payload)
+        ok, msg = engine.register_tool_late(
+            tool,
+            reason="tool-use",
+            authorized_by="tester",
+            current_turn=1,
+            amendment_signature=forged,
+        )
+        assert ok is False
+        assert "STRICT_AMENDMENT_INVALID" in msg
+        assert engine.verify_graph_integrity() is True
+        assert "browse" not in engine.registered_tools
+
+    def test_strict_blocked_l2_active_requires_signature(
+        self, declared_tools: list[ToolSchema]
+    ) -> None:
+        """Even blocked-L2 ledger entries need an authorized amendment in strict mode."""
+        authority = Ed25519Signer()
+        engine = EGIEngine(
+            "session-1",
+            "agent-1",
+            declared_tools,
+            signer=authority,
+            strict_amendment=True,
+        )
+        tool = _tool("browse", network=True, read=True)
+        payload = engine.preview_amendment_payload(
+            tool,
+            reason="tool-use",
+            authorized_by="attacker",
+            current_turn=1,
+            l2_active=True,
+        )
+        amendment_sig = authority.sign(payload)
+        ok, msg = engine.register_tool_late(
+            tool,
+            reason="tool-use",
+            authorized_by="attacker",
+            current_turn=1,
+            l2_active=True,
+            amendment_signature=amendment_sig,
+        )
+        assert ok is False  # L2-active is always a block
+        assert "INJECTION_ASSISTED_REGISTRATION" in msg
+        # Evidence lives in the signed ledger; subsequent verify must pass.
+        assert engine.verify_graph_integrity() is True
+
+    def test_preview_payload_is_non_mutating(
+        self, declared_tools: list[ToolSchema]
+    ) -> None:
+        engine = EGIEngine("session-1", "agent-1", declared_tools)
+        tools_before = list(engine.registered_tools)
+        ledger_before = len(engine.late_registrations)
+        _ = engine.preview_amendment_payload(
+            _tool("browse", network=True, read=True),
+            reason="tool-use",
+            authorized_by="tester",
+            current_turn=1,
+        )
+        assert engine.registered_tools == tools_before
+        assert len(engine.late_registrations) == ledger_before
+        assert engine.verify_graph_integrity() is True
