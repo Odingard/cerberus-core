@@ -150,7 +150,7 @@ class Ed25519Signer:
         """Export the private key as PEM. Encrypt with password if supplied."""
         encryption: serialization.KeySerializationEncryption = (
             serialization.BestAvailableEncryption(password)
-            if password
+            if password is not None
             else serialization.NoEncryption()
         )
         return self._private_key.private_bytes(

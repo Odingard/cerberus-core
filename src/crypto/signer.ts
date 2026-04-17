@@ -73,6 +73,7 @@ export interface SignerVerifier extends Signer, Verifier {}
 
 // ── HMAC (symmetric) ────────────────────────────────────────────────
 
+/** Options for constructing an {@link HmacSigner}. */
 export interface HmacSignerOptions {
   /** Raw HMAC key. If omitted, a random 32-byte key is generated. */
   readonly key?: Buffer;
@@ -121,6 +122,7 @@ export class HmacSigner implements SignerVerifier {
 
 // ── Ed25519 (asymmetric) ────────────────────────────────────────────
 
+/** Options for constructing an {@link Ed25519Signer}. */
 export interface Ed25519SignerOptions {
   /** Existing Ed25519 private key. If omitted, a fresh keypair is generated. */
   readonly privateKey?: KeyObject;
@@ -175,8 +177,11 @@ export class Ed25519Signer implements SignerVerifier {
   }
 }
 
+/** Options for constructing an {@link Ed25519Verifier}. */
 export interface Ed25519VerifierOptions {
+  /** Ed25519 public key to verify signatures against. */
   readonly publicKey: KeyObject;
+  /** Optional key identifier. If omitted, derived from the SPKI of the public key. */
   readonly keyId?: string;
 }
 
