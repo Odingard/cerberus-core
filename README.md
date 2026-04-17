@@ -3,7 +3,7 @@
 Runtime security for AI agent tool execution.
 
 [![CI](https://github.com/Odingard/cerberus-core/actions/workflows/ci.yml/badge.svg)](https://github.com/Odingard/cerberus-core/actions/workflows/ci.yml)
-[![Python SDK](https://github.com/Odingard/cerberus-core/actions/workflows/python-sdk.yml/badge.svg)](https://github.com/Odingard/cerberus-core/actions/workflows/python-sdk.yml)
+[![Python SDK](https://github.com/Odingard/cerberus-core/actions/workflows/Python-sdk.yml/badge.svg)](https://github.com/Odingard/cerberus-core/actions/workflows/Python-sdk.yml)
 [![npm version](https://img.shields.io/npm/v/@cerberus-ai/core.svg)](https://www.npmjs.com/package/@cerberus-ai/core)
 [![PyPI version](https://img.shields.io/pypi/v/cerberus-ai.svg)](https://pypi.org/project/cerberus-ai/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
