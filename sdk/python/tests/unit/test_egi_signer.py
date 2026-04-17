@@ -219,6 +219,31 @@ class TestEGIEngineSignedManifest:
         assert ok is False
         assert "INJECTION_ASSISTED_REGISTRATION" in msg
 
+    def test_blocked_registration_does_not_break_subsequent_verify(
+        self, declared_tools: list[ToolSchema]
+    ) -> None:
+        """A blocked (l2_active) registration appends to the signed ledger.
+        The engine must re-sign so verify_graph_integrity does not report
+        a spurious tampering failure on the next turn.
+        """
+        engine = EGIEngine("session-1", "agent-1", declared_tools)
+        ok, _ = engine.register_tool_late(
+            _tool("browse", network=True, read=True),
+            reason="tool-use",
+            authorized_by="attacker",
+            current_turn=1,
+            l2_active=True,
+        )
+        assert ok is False
+        assert engine.verify_graph_integrity() is True
+        # The blocked record is in the signed ledger as evidence.
+        assert any(
+            r.l2_active_at_registration and r.tool_name == "browse"
+            for r in engine.late_registrations
+        )
+        # A normal turn with no tool calls must still pass.
+        assert engine.check_turn([], current_turn=2) == []
+
     def test_check_turn_detects_tampering(self, declared_tools: list[ToolSchema]) -> None:
         engine = EGIEngine("session-1", "agent-1", declared_tools)
         # Tamper — flip a capability bit

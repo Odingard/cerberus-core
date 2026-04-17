@@ -20,6 +20,11 @@ import { createHash } from "node:crypto";
 import type { Signer, SignerVerifier, Verifier } from "../crypto/signer.js";
 import { getDefaultSigner } from "../crypto/signer.js";
 
+/** Type guard — does `s` expose a `verify()` method? */
+function hasVerify(s: Signer | SignerVerifier): s is SignerVerifier {
+  return typeof (s as { verify?: unknown }).verify === "function";
+}
+
 // ── Types ───────────────────────────────────────────────────────────
 
 /** Agent type in a multi-agent system. */
@@ -113,10 +118,9 @@ export function computeContextFingerprint(context: string): string {
 export function createDelegationGraph(
   sessionId: string,
   rootAgent: Omit<AgentNode, "parentAgentId">,
-  signer?: Signer & Partial<Verifier>,
+  signer?: Signer | SignerVerifier,
 ): DelegationGraph {
-  const effectiveSigner: SignerVerifier =
-    (signer as SignerVerifier | undefined) ?? getDefaultSigner();
+  const effectiveSigner: Signer | SignerVerifier = signer ?? getDefaultSigner();
 
   const nodes = new Map<string, AgentNode>();
   nodes.set(rootAgent.agentId, {
@@ -148,10 +152,9 @@ export function createDelegationGraph(
   // The signer is almost always also a verifier (HmacSigner, Ed25519Signer).
   // If a pure-sign adapter was passed we fall back to the default signer
   // (which is the normal case: the same process signs and verifies).
-  const verifier: Verifier =
-    typeof (effectiveSigner as Partial<Verifier>).verify === "function"
-      ? (effectiveSigner as Verifier)
-      : getDefaultSigner();
+  const verifier: Verifier = hasVerify(effectiveSigner)
+    ? effectiveSigner
+    : getDefaultSigner();
   graphVerifiers.set(graph, verifier);
 
   return graph;

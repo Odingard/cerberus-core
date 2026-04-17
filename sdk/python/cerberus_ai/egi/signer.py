@@ -29,13 +29,12 @@ import hmac
 import os
 from typing import Protocol, runtime_checkable
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-from cryptography.exceptions import InvalidSignature
-
 
 SigningAlgorithm = str  # "HMAC-SHA256" | "Ed25519"
 
@@ -174,7 +173,7 @@ class Ed25519Verifier:
         self._key_id = key_id or _public_key_fingerprint(public_key)
 
     @classmethod
-    def from_pem(cls, pem_bytes: bytes, key_id: str | None = None) -> "Ed25519Verifier":
+    def from_pem(cls, pem_bytes: bytes, key_id: str | None = None) -> Ed25519Verifier:
         pub = serialization.load_pem_public_key(pem_bytes)
         if not isinstance(pub, Ed25519PublicKey):
             raise TypeError("Expected an Ed25519 public key")

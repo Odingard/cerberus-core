@@ -36,7 +36,6 @@ from .signer import (
     get_default_signer,
 )
 
-
 #: Bumped whenever the signed-payload schema changes in a way verifiers
 #: need to know about.
 MANIFEST_VERSION: int = 2
@@ -205,7 +204,7 @@ class EGIEngine:
         if verifier is not None:
             self._verifier: Verifier = verifier
         elif isinstance(self._signer, Verifier):  # runtime_checkable Protocol
-            self._verifier = self._signer  # type: ignore[assignment]
+            self._verifier = self._signer
         else:
             raise ValueError(
                 "Signer does not implement Verifier; pass `verifier=` explicitly"
@@ -339,6 +338,10 @@ class EGIEngine:
                 node_id="",
             )
             self._graph.late_registrations.append(record)
+            # The blocked-registration record is evidence and belongs in
+            # the signed ledger. Re-sign so subsequent verify_graph_integrity
+            # / check_turn calls do not mis-report a tampering failure.
+            self._graph.signature = self._signer.sign(self._graph.signing_payload())
             return False, (
                 f"INJECTION_ASSISTED_REGISTRATION: Tool '{tool.name}' registration blocked — "
                 "L2 injection active at registration time"
