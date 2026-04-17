@@ -2,7 +2,7 @@
  * Tests for the Delegation Graph — multi-agent execution graph integrity.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   createDelegationGraph,
   addAgent,
@@ -11,45 +11,50 @@ import {
   isAuthorizedAgent,
   computeContextFingerprint,
   updateAgentRiskState,
-} from '../../src/graph/delegation.js';
-import type { DelegationGraph } from '../../src/graph/delegation.js';
+} from "../../src/graph/delegation.js";
+import type { DelegationGraph } from "../../src/graph/delegation.js";
+import {
+  Ed25519Signer,
+  HmacSigner,
+  getDefaultSigner,
+} from "../../src/crypto/signer.js";
 
-describe('createDelegationGraph', () => {
-  it('should create a graph with a root agent node', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'orchestrator',
-      agentType: 'orchestrator',
-      declaredTools: ['search', 'email'],
+describe("createDelegationGraph", () => {
+  it("should create a graph with a root agent node", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "orchestrator",
+      agentType: "orchestrator",
+      declaredTools: ["search", "email"],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    expect(graph.sessionId).toBe('session-1');
-    expect(graph.rootAgentId).toBe('orchestrator');
+    expect(graph.sessionId).toBe("session-1");
+    expect(graph.rootAgentId).toBe("orchestrator");
     expect(graph.nodes.size).toBe(1);
     expect(graph.edges).toHaveLength(0);
     expect(graph.signature).toBeTruthy();
   });
 
-  it('should store the root agent with correct properties', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
-      declaredTools: ['tool-a'],
+  it("should store the root agent with correct properties", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
+      declaredTools: ["tool-a"],
       riskState: { l1: true, l2: false, l3: false },
     });
 
-    const root = graph.nodes.get('root');
+    const root = graph.nodes.get("root");
     expect(root).toBeDefined();
-    expect(root!.agentType).toBe('orchestrator');
-    expect(root!.declaredTools).toEqual(['tool-a']);
+    expect(root!.agentType).toBe("orchestrator");
+    expect(root!.declaredTools).toEqual(["tool-a"]);
     expect(root!.riskState).toEqual({ l1: true, l2: false, l3: false });
     expect(root!.parentAgentId).toBeUndefined();
   });
 
-  it('should produce a valid HMAC signature at creation', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should produce a valid HMAC signature at creation", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
@@ -58,41 +63,41 @@ describe('createDelegationGraph', () => {
   });
 });
 
-describe('addAgent', () => {
-  it('should add a sub-agent with delegation edge from parent', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
-      declaredTools: ['search'],
+describe("addAgent", () => {
+  it("should add a sub-agent with delegation edge from parent", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
+      declaredTools: ["search"],
       riskState: { l1: false, l2: false, l3: false },
     });
 
     const result = addAgent(
       graph,
       {
-        agentId: 'sub-1',
-        agentType: 'subagent',
-        declaredTools: ['browse'],
+        agentId: "sub-1",
+        agentType: "subagent",
+        declaredTools: ["browse"],
         riskState: { l1: false, l2: false, l3: false },
       },
-      'root',
-      'research task context',
+      "root",
+      "research task context",
     );
 
     expect(result).toBe(true);
     expect(graph.nodes.size).toBe(2);
     expect(graph.edges).toHaveLength(1);
 
-    const sub = graph.nodes.get('sub-1');
+    const sub = graph.nodes.get("sub-1");
     expect(sub).toBeDefined();
-    expect(sub!.parentAgentId).toBe('root');
-    expect(sub!.agentType).toBe('subagent');
+    expect(sub!.parentAgentId).toBe("root");
+    expect(sub!.agentType).toBe("subagent");
   });
 
-  it('should carry risk state from parent to child via inheritance', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should carry risk state from parent to child via inheritance", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: true, l2: true, l3: false },
     });
@@ -100,23 +105,23 @@ describe('addAgent', () => {
     addAgent(
       graph,
       {
-        agentId: 'child',
-        agentType: 'subagent',
+        agentId: "child",
+        agentType: "subagent",
         declaredTools: [],
         riskState: { l1: false, l2: false, l3: true },
       },
-      'root',
-      'handoff context',
+      "root",
+      "handoff context",
     );
 
-    const child = graph.nodes.get('child');
+    const child = graph.nodes.get("child");
     expect(child!.riskState).toEqual({ l1: true, l2: true, l3: true });
   });
 
-  it('should record the context fingerprint on the delegation edge', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should record the context fingerprint on the delegation edge", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
@@ -124,26 +129,32 @@ describe('addAgent', () => {
     addAgent(
       graph,
       {
-        agentId: 'sub-1',
-        agentType: 'subagent',
+        agentId: "sub-1",
+        agentType: "subagent",
         declaredTools: [],
         riskState: { l1: false, l2: false, l3: false },
       },
-      'root',
-      'my context',
+      "root",
+      "my context",
     );
 
     const edge = graph.edges[0];
-    expect(edge.fromAgentId).toBe('root');
-    expect(edge.toAgentId).toBe('sub-1');
-    expect(edge.contextFingerprint).toBe(computeContextFingerprint('my context'));
-    expect(edge.riskStateAtHandoff).toEqual({ l1: false, l2: false, l3: false });
+    expect(edge.fromAgentId).toBe("root");
+    expect(edge.toAgentId).toBe("sub-1");
+    expect(edge.contextFingerprint).toBe(
+      computeContextFingerprint("my context"),
+    );
+    expect(edge.riskStateAtHandoff).toEqual({
+      l1: false,
+      l2: false,
+      l3: false,
+    });
   });
 
-  it('should return false when parent does not exist', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should return false when parent does not exist", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
@@ -151,23 +162,23 @@ describe('addAgent', () => {
     const result = addAgent(
       graph,
       {
-        agentId: 'orphan',
-        agentType: 'subagent',
+        agentId: "orphan",
+        agentType: "subagent",
         declaredTools: [],
         riskState: { l1: false, l2: false, l3: false },
       },
-      'nonexistent-parent',
-      'context',
+      "nonexistent-parent",
+      "context",
     );
 
     expect(result).toBe(false);
     expect(graph.nodes.size).toBe(1);
   });
 
-  it('should record parent risk state at handoff on the edge', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should record parent risk state at handoff on the edge", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: true, l2: false, l3: true },
     });
@@ -175,24 +186,28 @@ describe('addAgent', () => {
     addAgent(
       graph,
       {
-        agentId: 'sub-1',
-        agentType: 'tool_agent',
-        declaredTools: ['sendEmail'],
+        agentId: "sub-1",
+        agentType: "tool_agent",
+        declaredTools: ["sendEmail"],
         riskState: { l1: false, l2: false, l3: false },
       },
-      'root',
-      'delegate email',
+      "root",
+      "delegate email",
     );
 
-    expect(graph.edges[0].riskStateAtHandoff).toEqual({ l1: true, l2: false, l3: true });
+    expect(graph.edges[0].riskStateAtHandoff).toEqual({
+      l1: true,
+      l2: false,
+      l3: true,
+    });
   });
 });
 
-describe('verifyGraphIntegrity', () => {
-  it('should return true for an unmodified graph', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+describe("verifyGraphIntegrity", () => {
+  it("should return true for an unmodified graph", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
@@ -200,34 +215,108 @@ describe('verifyGraphIntegrity', () => {
     expect(verifyGraphIntegrity(graph)).toBe(true);
   });
 
-  it('should return false when signature is tampered', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should return false when signature is tampered", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    // Tamper with signature by casting to mutable
-    const tampered = { ...graph, signature: 'tampered-signature' } as DelegationGraph;
-    // Use a new object so the original's Map is preserved
+    // Tamper with signature by creating a new object — the verifier
+    // association is held via WeakMap on the original, so a fresh graph
+    // object exercises the explicit-verifier path.
     const tamperedGraph: DelegationGraph = {
-      sessionId: tampered.sessionId,
-      rootAgentId: tampered.rootAgentId,
-      nodes: tampered.nodes,
-      edges: tampered.edges,
-      signature: 'tampered-signature',
+      sessionId: graph.sessionId,
+      rootAgentId: graph.rootAgentId,
+      nodes: graph.nodes,
+      edges: graph.edges,
+      signature: "deadbeef",
+      algorithm: graph.algorithm,
+      keyId: graph.keyId,
     };
 
-    expect(verifyGraphIntegrity(tamperedGraph)).toBe(false);
+    expect(verifyGraphIntegrity(tamperedGraph, getDefaultSigner())).toBe(false);
+  });
+
+  it("should default to Ed25519 and emit algorithm + keyId on the graph", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
+      declaredTools: [],
+      riskState: { l1: false, l2: false, l3: false },
+    });
+
+    expect(graph.algorithm).toBe("Ed25519");
+    expect(graph.keyId).toHaveLength(16);
+    expect(graph.signature).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it("should honour an injected signer", () => {
+    const signer = new HmacSigner();
+    const graph = createDelegationGraph(
+      "session-1",
+      {
+        agentId: "root",
+        agentType: "orchestrator",
+        declaredTools: ["search"],
+        riskState: { l1: false, l2: false, l3: false },
+      },
+      signer,
+    );
+
+    expect(graph.algorithm).toBe("HMAC-SHA256");
+    expect(graph.keyId).toBe(signer.keyId);
+    expect(verifyGraphIntegrity(graph)).toBe(true);
+  });
+
+  it("should reject verification when a wrong-key verifier is supplied", () => {
+    const signer = new Ed25519Signer();
+    const graph = createDelegationGraph(
+      "session-1",
+      {
+        agentId: "root",
+        agentType: "orchestrator",
+        declaredTools: [],
+        riskState: { l1: false, l2: false, l3: false },
+      },
+      signer,
+    );
+
+    const wrongVerifier = new Ed25519Signer();
+    expect(verifyGraphIntegrity(graph, wrongVerifier)).toBe(false);
+  });
+
+  it("should detect root capability-surface tampering", () => {
+    const signer = new Ed25519Signer();
+    const graph = createDelegationGraph(
+      "session-1",
+      {
+        agentId: "root",
+        agentType: "orchestrator",
+        declaredTools: ["search"],
+        riskState: { l1: false, l2: false, l3: false },
+      },
+      signer,
+    );
+
+    // Swap the root's declaredTools in place to simulate runtime mutation.
+    const root = graph.nodes.get("root");
+    if (!root) throw new Error("root missing");
+    graph.nodes.set("root", {
+      ...root,
+      declaredTools: ["search", "sendEmail"],
+    });
+
+    expect(verifyGraphIntegrity(graph)).toBe(false);
   });
 });
 
-describe('getAgentChain', () => {
-  it('should return the chain from root to a deep sub-agent', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+describe("getAgentChain", () => {
+  it("should return the chain from root to a deep sub-agent", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
@@ -235,122 +324,134 @@ describe('getAgentChain', () => {
     addAgent(
       graph,
       {
-        agentId: 'mid',
-        agentType: 'subagent',
+        agentId: "mid",
+        agentType: "subagent",
         declaredTools: [],
         riskState: { l1: false, l2: false, l3: false },
       },
-      'root',
-      'mid context',
+      "root",
+      "mid context",
     );
 
     addAgent(
       graph,
       {
-        agentId: 'leaf',
-        agentType: 'tool_agent',
+        agentId: "leaf",
+        agentType: "tool_agent",
         declaredTools: [],
         riskState: { l1: false, l2: false, l3: false },
       },
-      'mid',
-      'leaf context',
+      "mid",
+      "leaf context",
     );
 
-    const chain = getAgentChain(graph, 'leaf');
+    const chain = getAgentChain(graph, "leaf");
     expect(chain).toHaveLength(3);
-    expect(chain[0].agentId).toBe('root');
-    expect(chain[1].agentId).toBe('mid');
-    expect(chain[2].agentId).toBe('leaf');
+    expect(chain[0].agentId).toBe("root");
+    expect(chain[1].agentId).toBe("mid");
+    expect(chain[2].agentId).toBe("leaf");
   });
 
-  it('should return a single-element chain for the root agent', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should return a single-element chain for the root agent", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    const chain = getAgentChain(graph, 'root');
+    const chain = getAgentChain(graph, "root");
     expect(chain).toHaveLength(1);
-    expect(chain[0].agentId).toBe('root');
+    expect(chain[0].agentId).toBe("root");
   });
 
-  it('should return empty array for a nonexistent agent', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should return empty array for a nonexistent agent", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    const chain = getAgentChain(graph, 'ghost');
+    const chain = getAgentChain(graph, "ghost");
     expect(chain).toHaveLength(0);
   });
 });
 
-describe('isAuthorizedAgent', () => {
-  it('should return true for an agent in the graph', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+describe("isAuthorizedAgent", () => {
+  it("should return true for an agent in the graph", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    expect(isAuthorizedAgent(graph, 'root')).toBe(true);
+    expect(isAuthorizedAgent(graph, "root")).toBe(true);
   });
 
-  it('should return false for an agent not in the graph', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should return false for an agent not in the graph", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    expect(isAuthorizedAgent(graph, 'unknown-agent')).toBe(false);
+    expect(isAuthorizedAgent(graph, "unknown-agent")).toBe(false);
   });
 });
 
-describe('updateAgentRiskState', () => {
-  it('should update risk state for an existing agent', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+describe("updateAgentRiskState", () => {
+  it("should update risk state for an existing agent", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    const result = updateAgentRiskState(graph, 'root', { l1: true, l2: true, l3: false });
+    const result = updateAgentRiskState(graph, "root", {
+      l1: true,
+      l2: true,
+      l3: false,
+    });
     expect(result).toBe(true);
-    expect(graph.nodes.get('root')!.riskState).toEqual({ l1: true, l2: true, l3: false });
+    expect(graph.nodes.get("root")!.riskState).toEqual({
+      l1: true,
+      l2: true,
+      l3: false,
+    });
   });
 
-  it('should return false for a nonexistent agent', () => {
-    const graph = createDelegationGraph('session-1', {
-      agentId: 'root',
-      agentType: 'orchestrator',
+  it("should return false for a nonexistent agent", () => {
+    const graph = createDelegationGraph("session-1", {
+      agentId: "root",
+      agentType: "orchestrator",
       declaredTools: [],
       riskState: { l1: false, l2: false, l3: false },
     });
 
-    const result = updateAgentRiskState(graph, 'ghost', { l1: true, l2: true, l3: true });
+    const result = updateAgentRiskState(graph, "ghost", {
+      l1: true,
+      l2: true,
+      l3: true,
+    });
     expect(result).toBe(false);
   });
 });
 
-describe('computeContextFingerprint', () => {
-  it('should produce a deterministic SHA-256 hash', () => {
-    const fp1 = computeContextFingerprint('hello world');
-    const fp2 = computeContextFingerprint('hello world');
+describe("computeContextFingerprint", () => {
+  it("should produce a deterministic SHA-256 hash", () => {
+    const fp1 = computeContextFingerprint("hello world");
+    const fp2 = computeContextFingerprint("hello world");
     expect(fp1).toBe(fp2);
     expect(fp1).toHaveLength(64); // SHA-256 hex
   });
 
-  it('should produce different hashes for different contexts', () => {
-    const fp1 = computeContextFingerprint('context-a');
-    const fp2 = computeContextFingerprint('context-b');
+  it("should produce different hashes for different contexts", () => {
+    const fp1 = computeContextFingerprint("context-a");
+    const fp2 = computeContextFingerprint("context-b");
     expect(fp1).not.toBe(fp2);
   });
 });

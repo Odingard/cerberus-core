@@ -46,15 +46,37 @@ export type {
   ToolCallContext,
   ToolExecutionPhase,
   ToolExecutionOutcome,
-} from './types/index.js';
-export { formatBlockedToolMessage } from './types/execution.js';
+} from "./types/index.js";
+export { formatBlockedToolMessage } from "./types/execution.js";
 
-export { guard } from './middleware/wrap.js';
-export type { GuardResult, MemoryGuardOptions } from './middleware/wrap.js';
+export { guard } from "./middleware/wrap.js";
+export type { GuardResult, MemoryGuardOptions } from "./middleware/wrap.js";
+
+// Cryptographic signer / verifier primitives for signed manifests
+export {
+  HmacSigner,
+  Ed25519Signer,
+  Ed25519Verifier,
+  getDefaultSigner,
+  setDefaultSigner,
+  resetDefaultSigner,
+} from "./crypto/signer.js";
+export type {
+  Signer,
+  Verifier,
+  SignerVerifier,
+  SigningAlgorithm,
+  HmacSignerOptions,
+  Ed25519SignerOptions,
+  Ed25519VerifierOptions,
+} from "./crypto/signer.js";
 
 // Multi-agent delegation graph
-export { guardMultiAgent } from './middleware/multi-agent.js';
-export type { MultiAgentGuardResult, SpawnAgentResult } from './middleware/multi-agent.js';
+export { guardMultiAgent } from "./middleware/multi-agent.js";
+export type {
+  MultiAgentGuardResult,
+  SpawnAgentResult,
+} from "./middleware/multi-agent.js";
 export {
   createDelegationGraph,
   addAgent,
@@ -63,57 +85,78 @@ export {
   isAuthorizedAgent,
   computeContextFingerprint,
   updateAgentRiskState,
-} from './graph/delegation.js';
+} from "./graph/delegation.js";
 export type {
   AgentType,
   RiskState,
   AgentNode,
   DelegationEdge,
   DelegationGraph,
-} from './graph/delegation.js';
-export type { ToolExecutorFn } from './engine/interceptor.js';
+} from "./graph/delegation.js";
+export type { ToolExecutorFn } from "./engine/interceptor.js";
 
 // Dynamic tool registration
-export { registerToolLate, computeSchemaHash } from './engine/tool-registration.js';
-export type { ToolSchema, ToolRegistrationResult } from './engine/tool-registration.js';
+export {
+  registerToolLate,
+  computeSchemaHash,
+} from "./engine/tool-registration.js";
+export type {
+  ToolSchema,
+  ToolRegistrationResult,
+} from "./engine/tool-registration.js";
 
 // Context window management
-export { analyzeContextWindow, estimateTokens, computeEntropy } from './engine/context-window.js';
-export type { ContentSegment, ContextWindowResult } from './engine/context-window.js';
+export {
+  analyzeContextWindow,
+  estimateTokens,
+  computeEntropy,
+} from "./engine/context-window.js";
+export type {
+  ContentSegment,
+  ContextWindowResult,
+} from "./engine/context-window.js";
 
 // Standalone MCP tool description scanner
-export { scanToolDescriptions } from './classifiers/mcp-scanner.js';
+export { scanToolDescriptions } from "./classifiers/mcp-scanner.js";
 
 // L4 Memory Contamination Graph exports
-export type { MemoryToolConfig } from './layers/l4-memory.js';
-export type { ContaminationGraph, GraphNode, GraphEdge } from './graph/contamination.js';
-export type { ProvenanceLedger, ProvenanceRecord } from './graph/ledger.js';
+export type { MemoryToolConfig } from "./layers/l4-memory.js";
+export type {
+  ContaminationGraph,
+  GraphNode,
+  GraphEdge,
+} from "./graph/contamination.js";
+export type { ProvenanceLedger, ProvenanceRecord } from "./graph/ledger.js";
 
 // OpenTelemetry instrumentation
-export { recordToolCall } from './telemetry/otel.js';
-export type { ToolCallRecord } from './telemetry/otel.js';
+export { recordToolCall } from "./telemetry/otel.js";
+export type { ToolCallRecord } from "./telemetry/otel.js";
 
 // Proxy/gateway mode
-export { createProxy } from './proxy/server.js';
-export type { ProxyConfig, ProxyToolConfig, ProxyServer } from './proxy/types.js';
+export { createProxy } from "./proxy/server.js";
+export type {
+  ProxyConfig,
+  ProxyToolConfig,
+  ProxyServer,
+} from "./proxy/types.js";
 
 // Framework adapters
-export { guardLangChain } from './adapters/langchain.js';
+export { guardLangChain } from "./adapters/langchain.js";
 export type {
   LangChainTool,
   LangChainGuardConfig,
   LangChainGuardResult,
-} from './adapters/langchain.js';
-export { guardVercelAI } from './adapters/vercel-ai.js';
+} from "./adapters/langchain.js";
+export { guardVercelAI } from "./adapters/vercel-ai.js";
 export type {
   VercelAITool,
   VercelAIToolMap,
   VercelAIGuardConfig,
   VercelAIGuardResult,
-} from './adapters/vercel-ai.js';
-export { createCerberusGuardrail } from './adapters/openai-agents.js';
+} from "./adapters/vercel-ai.js";
+export { createCerberusGuardrail } from "./adapters/openai-agents.js";
 export type {
   GuardrailFunctionOutput,
   OpenAIAgentsGuardConfig,
   OpenAIAgentsGuardrailResult,
-} from './adapters/openai-agents.js';
+} from "./adapters/openai-agents.js";
