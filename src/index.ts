@@ -82,6 +82,7 @@ export {
   createDelegationGraph,
   addAgent,
   verifyGraphIntegrity,
+  getGraphVerifier,
   getAgentChain,
   isAuthorizedAgent,
   computeContextFingerprint,
