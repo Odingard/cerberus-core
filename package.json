@@ -1,6 +1,6 @@
 {
   "name": "@cerberus-ai/core",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Runtime security for AI agent tool execution. Detects, correlates, and interrupts guarded Lethal Trifecta attack paths.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-04-17
+
+### Fixed
+
+- **Release plumbing**: republish to npm. `1.2.0` was previously published
+  from the private monorepo with an older build; `1.2.1` is the first
+  published build from `cerberus-core` containing the signed EGI manifest
+  work (`Signer` / `Verifier` protocol, Ed25519 default, removal of the
+  shipped HMAC literal, expanded signing payload, `manifest_version: 2`).
+  No functional changes vs `1.2.0` source.
+
 ## [1.2.0] - 2026-04-17
 
 ### Added
