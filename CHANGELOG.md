@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-17
+
+### Added
+
+- **Signed EGI manifests — `Signer` / `Verifier` protocol** — pluggable
+  cryptographic signing for execution-graph manifests (Python + TypeScript).
+  - New module `src/crypto/signer.ts` (TS) and `cerberus_ai.egi.signer` (Python)
+    exporting a `Signer` / `Verifier` / `SignerVerifier` protocol plus two
+    adapters: `HmacSigner` (HMAC-SHA256, symmetric) and `Ed25519Signer` /
+    `Ed25519Verifier` (EdDSA over Curve25519, asymmetric — the default).
+  - Default signer registry (`getDefaultSigner` / `setDefaultSigner`) so
+    host applications can bind the runtime to a KMS/HSM-backed key at
+    startup. Enterprise deployments should never rely on the process-local
+    default.
+  - Delegation graph (`src/graph/delegation.ts`) now signs with the
+    pluggable signer instead of a hardcoded HMAC literal; the graph carries
+    `algorithm` and `keyId` so verifiers can pick the correct key.
+  - EGI engine (`cerberus_ai/egi/engine.py`) signing payload expanded to
+    cover every node field (description, schema fingerprint, capability
+    flags), the edge set, the late-registration ledger, algorithm and
+    key_id. Bumped `MANIFEST_VERSION` to `2`.
+  - `EGIEngine` constructor accepts `signer=` / `verifier=` overrides; the
+    legacy `signing_key=` bytes path still works (wraps in `HmacSigner`).
+  - Added dependency: `cryptography>=41.0.0` (Python SDK).
+  - 16 new TypeScript tests (`tests/crypto/signer.test.ts`,
+    `tests/graph/delegation.test.ts` crypto cases); 27 new Python tests
+    (`tests/unit/test_egi_signer.py`).
+  - Removed hardcoded `HMAC_KEY = 'cerberus-delegation-graph-key'` from
+    `src/graph/delegation.ts`. Any pre-upgrade forgery path is closed.
+
+### Security
+
+- **Removed shipped symmetric HMAC key from `@cerberus-ai/core`**. Prior
+  versions of the package included a hardcoded signing key for the
+  delegation graph; the signature was therefore forgeable by any holder of
+  the npm artifact. Callers that relied on the old behaviour continue to
+  work because a process-ephemeral signer is used by default, but
+  verification no longer reduces to a constant.
+
+### Benchmarks
+
+- Ed25519 signature verification: ~120–135 µs for manifests up to ~11 KB
+  (Python `cryptography` and Node `node:crypto` are within 10% of each
+  other). HMAC-SHA256 verification: ~2.5 µs. See
+  `docs/egi-signed-manifests.md` for the full methodology.
+
+## [1.0.3] — 2025 (prior unreleased detection work)
+
 ### Added
 
 - **Detection validation results (N=525)** — complete detection run across all three providers in observe-only mode:

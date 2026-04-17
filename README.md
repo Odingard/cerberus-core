@@ -34,6 +34,7 @@ pip install cerberus-ai
 - [Getting Started](docs/getting-started.md)
 - [Verify Core Yourself](docs/verify-yourself.md)
 - [Live Model Validation](docs/live-model-validation.md)
+- [Signed EGI Manifests](docs/egi-signed-manifests.md)
 - [Core Live Attack Demo](https://odingard.github.io/cerberus-core/)
 - [Animated Core Demo Source](docs/demo.html)
 - [Demo Surface Strategy](docs/demo-surface-strategy.md)
@@ -96,6 +97,9 @@ cerberus = Cerberus(CerberusConfig(
 - Python SDK in `sdk/python/`
 - test suites in `tests/`
 - minimal examples in `examples/`
+- Signed EGI manifests via a pluggable `Signer` / `Verifier` protocol
+  (Ed25519 default, HMAC-SHA256 legacy). See
+  [docs/egi-signed-manifests.md](docs/egi-signed-manifests.md).
 
 ## What Core Does Not Include
 

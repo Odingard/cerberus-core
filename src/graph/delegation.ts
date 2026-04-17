@@ -4,19 +4,31 @@
  * Tracks the delegation tree of agents in a multi-agent system.
  * Each agent node records its type, declared tools, and accumulated
  * risk state. Delegation edges carry the context fingerprint and
- * risk state at the time of handoff. The graph is HMAC-signed at
- * creation and verified before every read.
+ * risk state at the time of handoff. The graph is cryptographically
+ * signed at creation and verified before every read.
  *
- * Depends on: src/types/signals.ts
+ * Signing is pluggable via the `Signer` / `Verifier` protocol in
+ * `src/crypto/signer.ts`. By default a process-ephemeral Ed25519 key
+ * is used (via `getDefaultSigner()`); enterprise deployments should
+ * inject a KMS/HSM-backed signer at startup with `setDefaultSigner()`.
+ *
+ * Depends on: src/types/signals.ts, src/crypto/signer.ts
  */
 
-import { createHmac } from 'node:crypto';
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
+
+import type { Signer, SignerVerifier, Verifier } from "../crypto/signer.js";
+import { getDefaultSigner } from "../crypto/signer.js";
+
+/** Type guard — does `s` expose a `verify()` method? */
+function hasVerify(s: Signer | SignerVerifier): s is SignerVerifier {
+  return "verify" in s && typeof s.verify === "function";
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
 /** Agent type in a multi-agent system. */
-export type AgentType = 'orchestrator' | 'subagent' | 'tool_agent';
+export type AgentType = "orchestrator" | "subagent" | "tool_agent";
 
 /** Per-layer risk state (L1/L2/L3 booleans). */
 export interface RiskState {
@@ -49,34 +61,67 @@ export interface DelegationGraph {
   readonly rootAgentId: string;
   readonly nodes: Map<string, AgentNode>;
   readonly edges: DelegationEdge[];
+  /** Hex-encoded signature over the canonical manifest. */
   readonly signature: string;
+  /** Algorithm that produced `signature`. */
+  readonly algorithm: string;
+  /** Key identifier for the signer that produced `signature`. */
+  readonly keyId: string;
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
 
-/** Signing key — in production, inject via config. */
-const HMAC_KEY = 'cerberus-delegation-graph-key';
+/**
+ * Canonical JSON payload that gets signed. Binding includes the
+ * session/root identity and the declared tools of the root agent so the
+ * signature cannot be replayed to assert a different capability surface.
+ */
+function canonicalPayload(
+  sessionId: string,
+  rootAgentId: string,
+  rootDeclaredTools: readonly string[],
+  algorithm: string,
+  keyId: string,
+): string {
+  return JSON.stringify({
+    v: 1,
+    sessionId,
+    rootAgentId,
+    rootDeclaredTools: [...rootDeclaredTools].sort(),
+    algorithm,
+    keyId,
+  });
+}
+
+/**
+ * Associate each graph with the Verifier needed to check its signature.
+ * Stored in a WeakMap so the association is cleaned up with the graph
+ * and never appears in any serialized form.
+ */
+const graphVerifiers = new WeakMap<DelegationGraph, Verifier>();
 
 /** Compute SHA-256 hash of context passed at handoff. */
 export function computeContextFingerprint(context: string): string {
-  return createHash('sha256').update(context).digest('hex');
-}
-
-/** Compute HMAC-SHA256 signature for the graph. */
-function computeSignature(sessionId: string, rootAgentId: string): string {
-  return createHmac('sha256', HMAC_KEY).update(`${sessionId}:${rootAgentId}`).digest('hex');
+  return createHash("sha256").update(context).digest("hex");
 }
 
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
- * Create a new delegation graph with a root agent.
- * The graph is HMAC-signed at creation.
+ * Create a new delegation graph with a root agent. The graph is signed
+ * with the provided signer (or the process default Ed25519 signer).
+ *
+ * @param sessionId - Session identifier
+ * @param rootAgent - The root/orchestrator agent
+ * @param signer - Optional signer; defaults to `getDefaultSigner()`
  */
 export function createDelegationGraph(
   sessionId: string,
-  rootAgent: Omit<AgentNode, 'parentAgentId'>,
+  rootAgent: Omit<AgentNode, "parentAgentId">,
+  signer?: Signer | SignerVerifier,
 ): DelegationGraph {
+  const effectiveSigner: Signer | SignerVerifier = signer ?? getDefaultSigner();
+
   const nodes = new Map<string, AgentNode>();
   nodes.set(rootAgent.agentId, {
     agentId: rootAgent.agentId,
@@ -85,15 +130,34 @@ export function createDelegationGraph(
     riskState: rootAgent.riskState,
   });
 
-  const signature = computeSignature(sessionId, rootAgent.agentId);
+  const payload = canonicalPayload(
+    sessionId,
+    rootAgent.agentId,
+    rootAgent.declaredTools,
+    effectiveSigner.algorithm,
+    effectiveSigner.keyId,
+  );
+  const signature = effectiveSigner.sign(payload);
 
-  return {
+  const graph: DelegationGraph = {
     sessionId,
     rootAgentId: rootAgent.agentId,
     nodes,
     edges: [],
     signature,
+    algorithm: effectiveSigner.algorithm,
+    keyId: effectiveSigner.keyId,
   };
+
+  // The signer is almost always also a verifier (HmacSigner, Ed25519Signer).
+  // If a pure-sign adapter was passed we fall back to the default signer
+  // (which is the normal case: the same process signs and verifies).
+  const verifier: Verifier = hasVerify(effectiveSigner)
+    ? effectiveSigner
+    : getDefaultSigner();
+  graphVerifiers.set(graph, verifier);
+
+  return graph;
 }
 
 /**
@@ -103,7 +167,7 @@ export function createDelegationGraph(
  */
 export function addAgent(
   graph: DelegationGraph,
-  agent: Omit<AgentNode, 'parentAgentId'>,
+  agent: Omit<AgentNode, "parentAgentId">,
   parentId: string,
   context: string,
 ): boolean {
@@ -143,11 +207,39 @@ export function addAgent(
 }
 
 /**
- * Verify the graph's HMAC signature matches its session/root data.
+ * Verify the graph's signature against its bound canonical payload.
+ *
+ * Uses the verifier that was associated with the graph at creation time
+ * (stored in a WeakMap). If an explicit verifier is supplied it overrides
+ * the stored one — this is the path enterprise gateways use when they hold
+ * the public key but never the private key.
  */
-export function verifyGraphIntegrity(graph: DelegationGraph): boolean {
-  const expected = computeSignature(graph.sessionId, graph.rootAgentId);
-  return graph.signature === expected;
+export function verifyGraphIntegrity(
+  graph: DelegationGraph,
+  verifier?: Verifier,
+): boolean {
+  const resolved: Verifier | undefined = verifier ?? graphVerifiers.get(graph);
+  if (!resolved) {
+    return false;
+  }
+  if (
+    resolved.algorithm !== graph.algorithm ||
+    resolved.keyId !== graph.keyId
+  ) {
+    return false;
+  }
+  const root = graph.nodes.get(graph.rootAgentId);
+  if (!root) {
+    return false;
+  }
+  const payload = canonicalPayload(
+    graph.sessionId,
+    graph.rootAgentId,
+    root.declaredTools,
+    graph.algorithm,
+    graph.keyId,
+  );
+  return resolved.verify(payload, graph.signature);
 }
 
 /**
@@ -155,7 +247,10 @@ export function verifyGraphIntegrity(graph: DelegationGraph): boolean {
  * Returns an ordered array of AgentNodes from root to the target.
  * Returns empty array if agentId is not found.
  */
-export function getAgentChain(graph: DelegationGraph, agentId: string): readonly AgentNode[] {
+export function getAgentChain(
+  graph: DelegationGraph,
+  agentId: string,
+): readonly AgentNode[] {
   const node = graph.nodes.get(agentId);
   if (!node) {
     return [];
@@ -179,7 +274,10 @@ export function getAgentChain(graph: DelegationGraph, agentId: string): readonly
 /**
  * Check if an agent exists in the delegation graph.
  */
-export function isAuthorizedAgent(graph: DelegationGraph, agentId: string): boolean {
+export function isAuthorizedAgent(
+  graph: DelegationGraph,
+  agentId: string,
+): boolean {
   return graph.nodes.has(agentId);
 }
 
@@ -202,7 +300,9 @@ export function updateAgentRiskState(
     agentType: existing.agentType,
     declaredTools: existing.declaredTools,
     riskState,
-    ...(existing.parentAgentId ? { parentAgentId: existing.parentAgentId } : {}),
+    ...(existing.parentAgentId
+      ? { parentAgentId: existing.parentAgentId }
+      : {}),
   };
 
   graph.nodes.set(agentId, updated);
