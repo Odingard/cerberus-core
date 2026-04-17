@@ -100,6 +100,19 @@ function canonicalPayload(
  */
 const graphVerifiers = new WeakMap<DelegationGraph, Verifier>();
 
+/**
+ * Look up the Verifier associated with a graph, if any. Returns `undefined`
+ * when the graph was constructed outside of {@link createDelegationGraph}
+ * (e.g. deserialized across a process boundary) or when no verifier was
+ * registered at creation time.
+ *
+ * Used by the per-turn manifest gate to distinguish "no verifier available"
+ * from "verifier rejected the signature" for diagnostic purposes.
+ */
+export function getGraphVerifier(graph: DelegationGraph): Verifier | undefined {
+  return graphVerifiers.get(graph);
+}
+
 /** Compute SHA-256 hash of context passed at handoff. */
 export function computeContextFingerprint(context: string): string {
   return createHash("sha256").update(context).digest("hex");

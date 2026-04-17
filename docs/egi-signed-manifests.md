@@ -1,14 +1,18 @@
 # Signed EGI Manifests
 
-> Status: Phase 1 — `Signer` / `Verifier` protocol, Ed25519 default,
-> expanded signing payload. Gateway-backed key custody, FIPS build guide,
-> and strict late-registration amendment flow land in subsequent phases.
+> Status: Phase 2 — `Signer` / `Verifier` protocol, Ed25519 default,
+> expanded signing payload, **per-turn execution gate** (TS), and
+> **strict late-registration amendment mode** (Python). Gateway-backed
+> key custody and FIPS build guide land in subsequent phases.
 
 Cerberus formalizes an agent's intended execution surface — declared
 tools, capability flags, schema fingerprints, edges, and late-registration
 ledger — as a single manifest that is cryptographically signed at
-initialization and verified before every turn. Any mutation after init
-breaks the signature and surfaces as a `GRAPH_INTEGRITY_FAILURE` violation.
+initialization and verified before every turn. In Phase 2 a failed
+signature is a **hard `BLOCKED` outcome** from the interceptor — the
+`MANIFEST_SIGNATURE_INVALID` signal in the new `INTEGRITY` layer
+saturates every risk bit so the threshold cannot downgrade it. "No valid
+signature → no state transition" is an actual gate, not a soft violation.
 
 ## Threat model
 
@@ -143,14 +147,120 @@ most ~0.1% of a turn's wall time, and is constant in manifest size up to
 `verified=true` keyed on `(manifest_version, signature)` and re-verify on
 any digest change.
 
+## Execution Gate (TypeScript)
+
+When a session carries a signed `DelegationGraph`, the TypeScript
+interceptor now runs `verifyManifestBeforeTurn()` before _any_ detection
+layer or tool executor. Failures short-circuit the turn and return a
+stable blocked message — nothing downstream sees the call.
+
+```ts
+import { interceptToolCall, Ed25519Signer, createDelegationGraph } from '@cerberus-ai/core';
+
+const signer = new Ed25519Signer();
+const session = createSession('session-1');
+session.delegationGraph = createDelegationGraph(
+  session.sessionId,
+  { agentId: 'root', agentType: 'orchestrator', declaredTools: ['read_email'], riskState: {...} },
+  signer,
+);
+
+const call = interceptToolCall('read_email', readEmail, session, config, []);
+await call({}); // ok — signature valid
+
+// Attacker mutates the manifest:
+session.delegationGraph.nodes.get('root').declaredTools.push('send_email'); // unsigned
+
+await call({}); // returns "[Cerberus] Tool call blocked before execution — risk score 4/4"
+```
+
+Failure reasons (on the `ManifestSignatureInvalidSignal`):
+
+| `reason` | When |
+|---|---|
+| `ALGORITHM_MISMATCH` | Verifier's algorithm does not match the manifest's |
+| `KEY_ID_MISMATCH` | Verifier's `keyId` does not match the manifest's |
+| `SIGNATURE_MISMATCH` | Signature no longer verifies (tampering, schema drift) |
+| `VERIFIER_MISSING` | No verifier is bound to this graph and none was passed |
+
+## Strict Late-Registration Amendment (Python)
+
+In the permissive (default) mode, a legitimate late-tool registration is
+re-signed by the runtime's own signer — the tamper-evidence relies on the
+runtime not being compromised. The strict mode removes that trust and
+requires an authority to sign every amendment out-of-band.
+
+```python
+from cerberus_ai.egi import EGIEngine, Ed25519Signer
+
+authority = Ed25519Signer()  # e.g. loaded from KMS in a different process
+engine = EGIEngine(
+    session_id, agent_id, declared_tools,
+    signer=Ed25519Signer(),      # runtime-local signer; cannot sign amendments
+    verifier=authority,          # authority's public key
+    strict_amendment=True,
+)
+
+# 1. Preview the exact payload that the authority must sign.
+payload = engine.preview_amendment_payload(
+    tool_name='export_to_s3',
+    current_turn=42,
+    tool_schema={'type': 'object', 'properties': {...}},
+)
+
+# 2. Send `payload` to the authority (gateway, HSM, human approval) and
+#    get back the signature.
+signature = authority.sign(payload)
+
+# 3. Apply the amendment. Without `amendment_signature=`, strict mode
+#    refuses the registration and rolls the graph back.
+engine.register_tool_late(
+    tool_name='export_to_s3',
+    tool_schema={'type': 'object', 'properties': {...}},
+    current_turn=42,
+    amendment_signature=signature,
+)
+```
+
+The preview payload is deterministic: `preview_amendment_payload()` and
+`register_tool_late()` derive the `node_id` the same way
+(uuid5 over `(graph_id, tool_name, current_turn)`) so the bytes signed
+out-of-band match the bytes applied in-band exactly.
+
+## End-to-End Harness
+
+`harness/validation/egi-gate.ts` runs the gate across six scenarios and
+writes `reports/egi-gate-demo.json`:
+
+- `legitimate` — signed manifest, 3 turns proceed.
+- `tamper` — mutate `root.declaredTools` mid-session → BLOCKED
+  (SIGNATURE_MISMATCH).
+- `forgery` — attacker swaps the manifest `keyId` → BLOCKED.
+- `algorithm-forgery` — attacker swaps the algorithm to HMAC → BLOCKED.
+- `amend-unsigned` / `amend-forged` / `amend-signed` — Python strict-mode
+  amendment refused without a signature, refused with a forged signature,
+  accepted with an authorized signature.
+- `blocked-l2-active-resigned` — injection-assisted registration is
+  refused but the blocked-ledger entry is re-signed so `verify_graph_integrity`
+  stays true.
+
+Run locally:
+
+```bash
+npx tsx harness/validation/egi-gate.ts
+cat reports/egi-gate-demo.json | jq .summary
+# { "total": 8, "passed": 8, "allPass": true }
+```
+
 ## Roadmap
 
-- **Phase 2** — wire the EGI verify gate into `src/engine/interceptor.ts`
-  so a failed verify returns `BLOCKED` before the executor fires, instead
-  of only emitting a violation.
+- **Phase 2** _(shipped 1.3.0)_ — the EGI verify gate is wired into
+  `src/engine/interceptor.ts`; a failed verify returns `BLOCKED` before
+  the executor fires, and Python `EGIEngine` supports
+  `strict_amendment=True` so runtime self-re-sign is no longer possible
+  on late-tool registration.
 - **Phase 3** — enterprise gateway `manifest-signer.ts` with AWS KMS,
-  Azure Key Vault, GCP KMS, and Vault Transit adapters; strict
-  late-registration amendment flow (runtime cannot re-sign).
+  Azure Key Vault, GCP KMS, and Vault Transit adapters.
 - **Phase 4** — FIPS 140-3 build guide and Dockerfile (RHEL UBI +
   OpenSSL FIPS provider); FedRAMP control mapping.
 - **Phase 5** — ALEC evidence export includes the signed manifest and
