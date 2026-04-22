@@ -3,9 +3,16 @@ cerberus_ai
 ~~~~~~~~~~~
 Cerberus — Python SDK for Cerberus Core runtime inspection.
 
-Primary entry point. One Cerberus instance = one agent session.
+Cerberus is runtime security middleware for LLM agents. One ``Cerberus``
+instance per agent session inspects every LLM turn for the **Lethal
+Trifecta** (L1 privileged data access + L2 untrusted content injection
++ L3 outbound exfiltration intent), **Execution Graph Integrity** (EGI)
+violations, **L4 cross-session memory contamination**, and **MCP tool
+poisoning**. If the trifecta co-occurs in a single turn, the turn is
+blocked before the tool call goes out.
 
-Usage (sync):
+Usage (sync)::
+
     from cerberus_ai import Cerberus, CerberusConfig
     from cerberus_ai.models import DataSource, ToolSchema
 
@@ -24,13 +31,23 @@ Usage (sync):
     if result.blocked:
         raise Exception(f"Security block: {result.events}")
 
-Usage (async):
-    async with Cerberus(config) as cerberus:
-        result = await cerberus.inspect_async(messages=messages)
+Usage (async, non-blocking)::
 
-Usage (streaming):
+    handle = cerberus.inspect_async_nonblocking(messages, tool_calls)
+    handle.on_block(lambda r: siem.alert(r))
+    result = handle.result(timeout=0.25)  # fail-secure at 250 ms
+
+Usage (streaming)::
+
     async for chunk in cerberus.stream(messages=messages):
         print(chunk["delta"], end="", flush=True)
+
+Usage (multi-agent, signed manifest)::
+
+    from cerberus_ai.graph.delegation import create_delegation_graph
+    graph = create_delegation_graph("session-1", "orchestrator",
+                                    "orchestrator", ["tool_a", "tool_b"])
+    cerberus.bind_delegation_graph(graph)
 """
 from __future__ import annotations
 
@@ -38,15 +55,23 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-__version__ = "1.1.3"
+__version__ = "1.3.0"
 
+from cerberus_ai.async_inspect import InspectionHandle, InspectionStillRunning
 from cerberus_ai.inspector import CerberusInspector
 from cerberus_ai.models import (
+    AgentType,
     CerberusConfig,
+    EventType,
     InspectionResult,
+    MemoryToolConfig,
     SecurityEvent,
+    Severity,
+    StreamingMode,
+    TrustLevel,
 )
 from cerberus_ai.telemetry.observe import ObserveEmitter
+from cerberus_ai.telemetry.observe import Verifier as ObserveVerifier
 
 
 class SecurityError(Exception):
@@ -65,8 +90,8 @@ class Cerberus:
     Cerberus runtime inspection SDK — session-scoped instance.
 
     One Cerberus instance manages one agent session. For multi-agent
-    deployments, create one instance per agent and treat the GitHub repo as
-    the source of truth for current product boundaries and roadmap.
+    deployments, create one instance per agent and bind the same signed
+    delegation graph to each via :meth:`bind_delegation_graph`.
     """
 
     def __init__(
@@ -85,9 +110,9 @@ class Cerberus:
             agent_id=agent_id,
         )
 
-        # Warn on PASSTHROUGH mode
-        if self._config.streaming_mode.value == "PASSTHROUGH":
-            from cerberus_ai.models import EventType, SecurityEvent, Severity
+        # Streaming-mode advisory events (BUFFER_ALL is the safe default)
+        mode = self._config.streaming_mode
+        if mode == StreamingMode.PASSTHROUGH:
             self._observe.emit(SecurityEvent(
                 event_type=EventType.PASSTHROUGH_MODE_ACTIVE,
                 severity=Severity.HIGH,
@@ -95,9 +120,25 @@ class Cerberus:
                 session_id=self._session_id,
                 payload={
                     "warning": (
-                        "PASSTHROUGH mode active"
-                        " — streaming detection"
-                        " significantly reduced"
+                        "PASSTHROUGH mode active — full pre-tool-call"
+                        " inspection is bypassed for streamed chunks;"
+                        " only post-turn detection runs. Do not enable"
+                        " in production for privileged-data agents."
+                    ),
+                },
+            ))
+        elif mode == StreamingMode.PARTIAL_SCAN:
+            self._observe.emit(SecurityEvent(
+                event_type=EventType.PARTIAL_SCAN_MODE_ACTIVE,
+                severity=Severity.ADVISORY,
+                turn_id="config",
+                session_id=self._session_id,
+                payload={
+                    "warning": (
+                        "PARTIAL_SCAN mode active — chunks beyond the"
+                        " buffer limit are inspected incrementally;"
+                        " detection coverage is slightly reduced"
+                        " compared with BUFFER_ALL."
                     ),
                 },
             ))
@@ -113,15 +154,6 @@ class Cerberus:
     ) -> InspectionResult:
         """
         Inspect a complete LLM turn synchronously.
-
-        Args:
-            messages: LLM conversation messages
-            tool_calls: Tool calls from this turn
-            raise_on_block: If True, raises SecurityError on block
-            partial_signal_callback: Called for each partial detection signal
-
-        Returns:
-            InspectionResult
         """
         result = self._inspector.inspect(
             messages=messages,
@@ -149,6 +181,40 @@ class Cerberus:
             raise SecurityError(result)
         return result
 
+    def inspect_async_nonblocking(
+        self,
+        messages: list[dict[str, Any]] | list[Any],
+        tool_calls: list[dict[str, Any]] | None = None,
+        partial_signal_callback: Callable[[SecurityEvent], None] | None = None,
+    ) -> InspectionHandle:
+        """Schedule an inspection on a worker thread and return a handle.
+
+        Use when the agent wants to keep generating while inspection
+        runs in the background. Before dispatching any outbound tool
+        call, the caller MUST block on ``handle.result(timeout=...)``.
+        """
+        return self._inspector.inspect_async_nonblocking(
+            messages=messages,
+            tool_calls=tool_calls,
+            partial_signal_callback=partial_signal_callback,
+        )
+
+    def inspect_memory_tool_result(
+        self,
+        *,
+        tool_name: str,
+        tool_arguments: dict[str, Any],
+        tool_result: str,
+        trust_level: TrustLevel | str = TrustLevel.UNKNOWN,
+    ) -> Any:
+        """Feed a completed memory-tool result through the L4 detector."""
+        return self._inspector.inspect_memory_tool_result(
+            tool_name=tool_name,
+            tool_arguments=tool_arguments,
+            tool_result=tool_result,
+            trust_level=trust_level,
+        )
+
     async def stream(
         self,
         messages: list[dict[str, Any]] | list[Any],
@@ -158,24 +224,51 @@ class Cerberus:
         """
         Streaming inspection — yields chunks only after full-turn inspection passes.
 
-        In BUFFER_ALL mode (default): buffers all chunks, inspects complete turn,
-        then replays buffered chunks if safe.
+        The behaviour is controlled by ``config.streaming_mode``:
 
-        In PASSTHROUGH mode: yields chunks immediately (reduced detection coverage).
+        * ``BUFFER_ALL`` (default) — buffer all chunks, inspect the complete
+          turn, then emit a synthetic ``inspection_pass`` chunk if safe.
+        * ``PARTIAL_SCAN`` — same as ``BUFFER_ALL`` but emits a
+          ``PARTIAL_SCAN_MODE_ACTIVE`` advisory at init time.
+        * ``PASSTHROUGH`` — yield chunks immediately with reduced
+          pre-tool-call detection (legacy compatibility).
         """
-        # In BUFFER_ALL: inspect the complete turn (messages already include full context)
-        # then yield a synthetic "pass" signal
+        mode = self._config.streaming_mode
+        if mode == StreamingMode.PASSTHROUGH:
+            # Kick off inspection in the background; still yield a
+            # terminal signal when it completes so callers can tear
+            # down cleanly if the verdict is BLOCKED.
+            handle = self.inspect_async_nonblocking(
+                messages=messages,
+                tool_calls=tool_calls,
+                partial_signal_callback=partial_signal_callback,
+            )
+            yield {
+                "type": "passthrough",
+                "turn_id": "passthrough",
+            }
+            result = handle.result()
+            if result.blocked:
+                return
+            yield {
+                "type": "inspection_pass",
+                "turn_id": result.turn_id,
+                "severity": result.severity.value,
+                "conditions": {
+                    "l1": result.conditions.l1_privileged_data,
+                    "l2": result.conditions.l2_injection,
+                    "l3": result.conditions.l3_exfiltration_path,
+                },
+            }
+            return
+
         result = await self.inspect_async(
             messages=messages,
             tool_calls=tool_calls,
             partial_signal_callback=partial_signal_callback,
         )
-
         if result.blocked:
-            # Stream is terminated — do not yield any chunks
             return
-
-        # Turn passed — signal to caller
         yield {
             "type": "inspection_pass",
             "turn_id": result.turn_id,
@@ -195,20 +288,18 @@ class Cerberus:
         reason: str,
         authorized_by: str,
     ) -> tuple[bool, str]:
-        """
-        Register a tool after session initialization.
-
-        Uses the controlled late-binding hook — logged in audit trail.
-        Blocked if injection (L2) was active in the recent session.
-
-        Returns:
-            (success: bool, message: str)
-        """
+        """Register a tool after session initialization (late-binding hook)."""
         return self._inspector.register_tool_late(
             tool=tool,
             reason=reason,
             authorized_by=authorized_by,
         )
+
+    # ── Multi-agent binding ────────────────────────────────────────────────────
+
+    def bind_delegation_graph(self, graph: Any, verifier: Any | None = None) -> None:
+        """Bind a signed delegation graph (enables manifest gate + cross-agent)."""
+        self._inspector.bind_delegation_graph(graph, verifier)
 
     # ── Context manager support ────────────────────────────────────────────────
 
@@ -225,7 +316,7 @@ class Cerberus:
         self.close()
 
     def close(self) -> None:
-        self._observe.close()
+        self._inspector.close()
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -236,3 +327,23 @@ class Cerberus:
     @property
     def config(self) -> CerberusConfig:
         return self._config
+
+
+__all__ = [
+    "AgentType",
+    "Cerberus",
+    "CerberusConfig",
+    "EventType",
+    "InspectionHandle",
+    "InspectionResult",
+    "InspectionStillRunning",
+    "MemoryToolConfig",
+    "ObserveEmitter",
+    "ObserveVerifier",
+    "SecurityError",
+    "SecurityEvent",
+    "Severity",
+    "StreamingMode",
+    "TrustLevel",
+    "__version__",
+]

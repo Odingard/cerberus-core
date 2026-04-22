@@ -3,24 +3,46 @@ cerberus_ai.inspector
 ~~~~~~~~~~~~~~~~~~~~~
 Core Cerberus inspection engine.
 
-Orchestrates L1, L2, L3 detectors and EGI into a single synchronous
-and async inspection API. Emits events to Observe.
+Orchestrates L1, L2, L3, L4 detectors, EGI, the manifest gate, the
+MCP tool-poisoning sub-classifier, and cross-agent correlation into
+a single synchronous-or-async inspection API. Emits signed events
+to Observe.
+
+Pre-flight checks (fail-secure BLOCK):
+    * ``max_turn_bytes`` size limit
+    * ``manifest_gate_enabled`` per-turn manifest signature verification
+
+Detection runs with an optional ``inspection_timeout_ms`` budget; on
+expiry the call returns a BLOCKED result with ``INSPECTION_TIMEOUT``.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import logging
+import threading
 import time
 import uuid
 from collections.abc import Callable
 from typing import Any
 
+from cerberus_ai.async_inspect import InspectionHandle
+from cerberus_ai.classifiers.mcp_scanner import (
+    check_tool_call_poisoning,
+    scan_tool_descriptions,
+)
 from cerberus_ai.context_window import (
     AlwaysInspectRegions,
     analyze_context_window,
 )
+from cerberus_ai.cross_agent import (
+    detect_context_contamination,
+    detect_cross_agent_trifecta,
+    detect_unauthorized_agent_spawn,
+)
 from cerberus_ai.detectors.l1 import L1Detector
 from cerberus_ai.detectors.l2 import L2Detector
 from cerberus_ai.detectors.l3 import L3Detector, SessionL3State
+from cerberus_ai.detectors.l4_memory import L4Detector, MemoryContaminationSignal
 from cerberus_ai.detectors.outbound_encoding import detect_outbound_encoding
 from cerberus_ai.detectors.split_exfiltration import (
     SplitExfilSession,
@@ -31,6 +53,11 @@ from cerberus_ai.detectors.tool_chain import (
     detect_tool_chain_exfiltration,
 )
 from cerberus_ai.egi.engine import EGIEngine
+from cerberus_ai.egi.signer import Verifier
+from cerberus_ai.graph.contamination import create_contamination_graph
+from cerberus_ai.graph.delegation import DelegationGraph, RiskState, update_risk_state
+from cerberus_ai.graph.ledger import ProvenanceLedger
+from cerberus_ai.manifest_gate import verify_manifest_before_turn
 from cerberus_ai.models import (
     CerberusConfig,
     EventType,
@@ -40,8 +67,11 @@ from cerberus_ai.models import (
     Severity,
     ToolCall,
     TrifectaConditions,
+    TrustLevel,
 )
 from cerberus_ai.telemetry.observe import ObserveEmitter
+
+logger = logging.getLogger("cerberus.inspector")
 
 
 class CerberusInspector:
@@ -100,6 +130,66 @@ class CerberusInspector:
             declared_tools=config.declared_tools,
         )
 
+        # L4 memory contamination detector + ledger (optional)
+        self._ledger: ProvenanceLedger | None = (
+            ProvenanceLedger(config.provenance_ledger_path)
+            if config.provenance_ledger_path
+            else ProvenanceLedger()
+            if config.memory_tools
+            else None
+        )
+        self._l4 = L4Detector(
+            memory_tools=list(config.memory_tools),
+            graph=create_contamination_graph(),
+            ledger=self._ledger,
+        )
+
+        # Multi-agent delegation state (bound lazily via bind_delegation_graph)
+        self._delegation_graph: DelegationGraph | None = None
+        self._manifest_verifier: Verifier | None = None
+        self._current_risk_state = RiskState()
+
+        # Per-inspector executor used to enforce ``inspection_timeout_ms``
+        # and to back the non-blocking async handle. Bounded to one worker;
+        # we don't want two turns for the same session racing.
+        self._exec = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix=f"cerberus-{self._agent_id[:8]}"
+        )
+        self._lock = threading.Lock()
+
+        # One-shot registration-time MCP poisoning scan. Any hit is emitted
+        # as a HIGH event so Guard sees that the agent was booted with a
+        # tool whose description is trying to manipulate the model.
+        if config.mcp_scanner_enabled and config.declared_tools:
+            for result in scan_tool_descriptions(config.declared_tools):
+                if not result.poisoned:
+                    continue
+                severity = (
+                    Severity.CRITICAL
+                    if result.severity == "high"
+                    else Severity.HIGH
+                    if result.severity == "medium"
+                    else Severity.ADVISORY
+                )
+                self._emit(
+                    SecurityEvent(
+                        event_type=EventType.MCP_TOOL_POISONED,
+                        severity=severity,
+                        turn_id="registration",
+                        session_id=self._session_id,
+                        payload={
+                            "tool_name": result.tool_name,
+                            "patterns": list(result.patterns_found),
+                            "phase": "registration",
+                        },
+                    )
+                )
+
+        # Emit a startup warning if Observe fell back to an ephemeral key.
+        warning = self._observe.emit_ephemeral_key_warning()
+        if warning is not None:
+            self._emit(warning)
+
     def _parse_tool_calls(self, raw_tool_calls: list[dict[str, Any]] | None) -> list[ToolCall]:
         """Parse raw tool call dicts into ToolCall models."""
         if not raw_tool_calls:
@@ -129,6 +219,27 @@ class CerberusInspector:
         event.sequence_number = self._sequence_number
         self._observe.emit(event)
 
+    # ── Multi-agent binding ───────────────────────────────────────────────
+
+    def bind_delegation_graph(
+        self,
+        graph: DelegationGraph,
+        verifier: Verifier | None = None,
+    ) -> None:
+        """Bind a signed delegation graph to this inspector.
+
+        Every subsequent ``inspect()`` call will verify the graph signature
+        before any detector runs (the *manifest gate*) and, after detection,
+        correlate the per-turn risk state across the delegation chain for
+        CROSS_AGENT_TRIFECTA / CONTEXT_CONTAMINATION_PROPAGATION /
+        UNAUTHORIZED_AGENT_SPAWN.
+        """
+        with self._lock:
+            self._delegation_graph = graph
+            self._manifest_verifier = verifier
+
+    # ── Inspect ───────────────────────────────────────────────────────────
+
     def inspect(
         self,
         messages: list[Message] | list[dict[str, Any]],
@@ -137,6 +248,10 @@ class CerberusInspector:
     ) -> InspectionResult:
         """
         Synchronous inspection of a complete LLM turn.
+
+        Runs pre-flight checks (size limit, manifest gate) before the
+        detection pipeline. If ``inspection_timeout_ms`` is set and exceeded,
+        returns a fail-secure BLOCKED result with ``INSPECTION_TIMEOUT``.
 
         Args:
             messages: Conversation messages (Message objects or dicts)
@@ -147,10 +262,150 @@ class CerberusInspector:
             InspectionResult — check .blocked and .trifecta_detected
         """
         start_us = time.perf_counter_ns() // 1000
+        turn_id = str(uuid.uuid4())
+
+        # ── Pre-flight: per-turn size limit (Sprint 7, fail-secure) ─────────
+        size_block = self._check_size_limit(messages, tool_calls, turn_id, start_us)
+        if size_block is not None:
+            return size_block
+
+        # ── Pre-flight: per-turn manifest gate (v1.3.0 TS parity) ───────────
+        manifest_block = self._check_manifest_gate(turn_id, start_us)
+        if manifest_block is not None:
+            return manifest_block
+
+        # ── Detection with optional hard timeout ────────────────────────────
+        timeout_ms = self._config.inspection_timeout_ms
+        if timeout_ms and timeout_ms > 0:
+            try:
+                future = self._exec.submit(
+                    self._inspect_core,
+                    messages,
+                    tool_calls,
+                    partial_signal_callback,
+                    turn_id,
+                    start_us,
+                )
+                return future.result(timeout=timeout_ms / 1000.0)
+            except concurrent.futures.TimeoutError:
+                end_us = time.perf_counter_ns() // 1000
+                event = SecurityEvent(
+                    event_type=EventType.INSPECTION_TIMEOUT,
+                    severity=Severity.CRITICAL,
+                    turn_id=turn_id,
+                    session_id=self._session_id,
+                    payload={"timeout_ms": timeout_ms},
+                    blocked=True,
+                )
+                self._emit(event)
+                return InspectionResult(
+                    turn_id=turn_id,
+                    session_id=self._session_id,
+                    blocked=True,
+                    severity=Severity.CRITICAL,
+                    events=[event],
+                    inspection_latency_us=end_us - start_us,
+                )
+
+        return self._inspect_core(
+            messages, tool_calls, partial_signal_callback, turn_id, start_us
+        )
+
+    # ── Pre-flight helpers ────────────────────────────────────────────────
+
+    def _check_size_limit(
+        self,
+        messages: list[Message] | list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]] | None,
+        turn_id: str,
+        start_us: int,
+    ) -> InspectionResult | None:
+        limit = self._config.max_turn_bytes
+        if not limit or limit <= 0:
+            return None
+        total = 0
+        for m in messages:
+            if isinstance(m, Message):
+                total += len(m.model_dump_json())
+            else:
+                total += len(str(m))
+            if total > limit:
+                break
+        if total <= limit and tool_calls:
+            for tc in tool_calls:
+                total += len(str(tc))
+                if total > limit:
+                    break
+        if total <= limit:
+            return None
+        end_us = time.perf_counter_ns() // 1000
+        event = SecurityEvent(
+            event_type=EventType.TURN_SIZE_EXCEEDED,
+            severity=Severity.CRITICAL,
+            turn_id=turn_id,
+            session_id=self._session_id,
+            payload={"turn_bytes": total, "limit_bytes": limit},
+            blocked=True,
+        )
+        self._emit(event)
+        return InspectionResult(
+            turn_id=turn_id,
+            session_id=self._session_id,
+            blocked=True,
+            severity=Severity.CRITICAL,
+            events=[event],
+            inspection_latency_us=end_us - start_us,
+        )
+
+    def _check_manifest_gate(
+        self, turn_id: str, start_us: int
+    ) -> InspectionResult | None:
+        if not self._config.manifest_gate_enabled:
+            return None
+        graph = self._delegation_graph
+        if graph is None:
+            return None
+        signal = verify_manifest_before_turn(
+            graph, self._session_id, turn_id, self._manifest_verifier
+        )
+        if signal is None:
+            return None
+        end_us = time.perf_counter_ns() // 1000
+        event = SecurityEvent(
+            event_type=EventType.MANIFEST_SIGNATURE_INVALID,
+            severity=Severity.CRITICAL,
+            turn_id=turn_id,
+            session_id=self._session_id,
+            payload={
+                "algorithm": signal.algorithm,
+                "key_id": signal.key_id,
+                "reason": signal.reason,
+            },
+            blocked=True,
+        )
+        self._emit(event)
+        return InspectionResult(
+            turn_id=turn_id,
+            session_id=self._session_id,
+            blocked=True,
+            severity=Severity.CRITICAL,
+            events=[event],
+            inspection_latency_us=end_us - start_us,
+        )
+
+    # ── Core pipeline ─────────────────────────────────────────────────────
+
+    def _inspect_core(
+        self,
+        messages: list[Message] | list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]] | None,
+        partial_signal_callback: Callable[[SecurityEvent], None] | None,
+        turn_id: str,
+        start_us: int,
+    ) -> InspectionResult:
         self._turn_counter += 1
         self._l3_state.advance_turn()
 
-        turn_id = str(uuid.uuid4())
         events: list[SecurityEvent] = []
 
         # Normalize message dicts to Message objects
@@ -383,6 +638,35 @@ class CerberusInspector:
                 if not l3_active:
                     l3_active = True
 
+            # ── MCP Tool Poisoning (per-call) ─────────────────────────────
+            if self._config.mcp_scanner_enabled:
+                mcp_result = check_tool_call_poisoning(
+                    tool_name=tc.name, tools=self._config.declared_tools
+                )
+                if mcp_result is not None and mcp_result.poisoned:
+                    severity = (
+                        Severity.CRITICAL
+                        if mcp_result.severity == "high"
+                        else Severity.HIGH
+                        if mcp_result.severity == "medium"
+                        else Severity.ADVISORY
+                    )
+                    event = SecurityEvent(
+                        event_type=EventType.MCP_TOOL_POISONED,
+                        severity=severity,
+                        turn_id=turn_id,
+                        session_id=self._session_id,
+                        payload={
+                            "tool_name": mcp_result.tool_name,
+                            "patterns": list(mcp_result.patterns_found),
+                            "phase": "invocation",
+                        },
+                    )
+                    events.append(event)
+                    self._emit(event)
+                    if not l2_active:
+                        l2_active = True
+
             # Record tool call in chain history for future turns
             self._tool_chain_history.append(
                 ToolChainEntry(tool_name=tc.name, turn_id=turn_id)
@@ -437,6 +721,71 @@ class CerberusInspector:
             events.append(trifecta_event)
             self._emit(trifecta_event)
 
+        # ── Cross-agent correlation (multi-agent deployments) ────────────────
+        if self._delegation_graph is not None:
+            self._current_risk_state = RiskState(
+                l1=self._current_risk_state.l1 or l1_active,
+                l2=self._current_risk_state.l2 or l2_active,
+                l3=self._current_risk_state.l3 or l3_active,
+            )
+            update_risk_state(
+                self._delegation_graph, self._agent_id, self._current_risk_state
+            )
+            spawn_signal = detect_unauthorized_agent_spawn(
+                self._delegation_graph, self._agent_id, turn_id
+            )
+            if spawn_signal is not None:
+                event = SecurityEvent(
+                    event_type=EventType.UNAUTHORIZED_AGENT_SPAWN,
+                    severity=Severity.CRITICAL,
+                    turn_id=turn_id,
+                    session_id=self._session_id,
+                    payload={"agent_id": spawn_signal.agent_id},
+                    blocked=True,
+                )
+                events.append(event)
+                self._emit(event)
+                blocked = True
+
+            cross_signal = detect_cross_agent_trifecta(
+                self._delegation_graph,
+                self._agent_id,
+                self._current_risk_state,
+                turn_id,
+            )
+            if cross_signal is not None:
+                event = SecurityEvent(
+                    event_type=EventType.CROSS_AGENT_TRIFECTA,
+                    severity=Severity.CRITICAL,
+                    turn_id=turn_id,
+                    session_id=self._session_id,
+                    payload={
+                        "contributing_agents": list(cross_signal.contributing_agents),
+                    },
+                    blocked=True,
+                )
+                events.append(event)
+                self._emit(event)
+                blocked = True
+
+            cc_signal = detect_context_contamination(
+                self._delegation_graph, self._agent_id, turn_id
+            )
+            if cc_signal is not None:
+                event = SecurityEvent(
+                    event_type=EventType.CONTEXT_CONTAMINATION_PROPAGATION,
+                    severity=Severity.HIGH,
+                    turn_id=turn_id,
+                    session_id=self._session_id,
+                    payload={
+                        "source_agent_id": cc_signal.source_agent_id,
+                        "contaminated_agent_id": cc_signal.contaminated_agent_id,
+                        "contamination_chain": list(cc_signal.contamination_chain),
+                    },
+                )
+                events.append(event)
+                self._emit(event)
+
         end_us = time.perf_counter_ns() // 1000
         latency_us = end_us - start_us
 
@@ -468,6 +817,81 @@ class CerberusInspector:
             None,
             lambda: self.inspect(messages, tool_calls, partial_signal_callback),
         )
+
+    def inspect_async_nonblocking(
+        self,
+        messages: list[Message] | list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]] | None = None,
+        partial_signal_callback: Callable[[SecurityEvent], None] | None = None,
+    ) -> InspectionHandle:
+        """Schedule an inspection without blocking the caller.
+
+        Returns an :class:`InspectionHandle` the caller can poll,
+        ``await`` via ``handle.result()``, or attach callbacks to with
+        ``handle.on_complete()`` / ``handle.on_block()``. Use this
+        variant when the agent wants to keep generating tokens while
+        inspection runs on a worker thread — the verdict is still
+        required before any outbound tool call is dispatched.
+        """
+        future = self._exec.submit(
+            self.inspect, messages, tool_calls, partial_signal_callback
+        )
+        return InspectionHandle(future)
+
+    def inspect_memory_tool_result(
+        self,
+        *,
+        tool_name: str,
+        tool_arguments: dict[str, Any],
+        tool_result: str,
+        trust_level: TrustLevel | str = TrustLevel.UNKNOWN,
+    ) -> MemoryContaminationSignal | None:
+        """Feed a completed memory-tool call through the L4 detector.
+
+        Callers invoke this after a declared memory tool
+        (``MemoryToolConfig``) returns, so the contamination graph and
+        provenance ledger can record the taint of the stored / read
+        node. If a read surfaces a node whose lineage contains an
+        ``untrusted`` ancestor from a different session, a
+        ``CONTAMINATED_MEMORY_ACTIVE`` event is emitted and the signal
+        returned.
+        """
+        if isinstance(trust_level, str):
+            trust_level = TrustLevel(trust_level)
+
+        signal = self._l4.on_tool_call(
+            session_id=self._session_id,
+            turn_id=str(uuid.uuid4()),
+            tool_name=tool_name,
+            tool_arguments=tool_arguments,
+            tool_result=tool_result,
+            trust_level=trust_level,
+        )
+        if signal is not None:
+            event = SecurityEvent(
+                event_type=EventType.CONTAMINATED_MEMORY_ACTIVE,
+                severity=Severity.HIGH,
+                turn_id=signal.turn_id,
+                session_id=self._session_id,
+                payload={
+                    "tool_name": signal.tool_name,
+                    "node_id": signal.node_id,
+                    "contamination_source": signal.contamination_source,
+                },
+            )
+            self._emit(event)
+        return signal
+
+    def close(self) -> None:
+        """Shut down the per-inspector worker thread + flush Observe."""
+        try:
+            self._exec.shutdown(wait=False, cancel_futures=True)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("Inspector executor shutdown failed: %s", e)
+        try:
+            self._observe.close()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("Inspector observe close failed: %s", e)
 
     def register_tool_late(
         self,

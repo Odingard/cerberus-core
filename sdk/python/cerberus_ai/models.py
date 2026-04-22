@@ -48,22 +48,49 @@ class EventType(str, Enum):
     EGI_TOOL_LATE_REGISTERED = "EGI_LATE_TOOL_REGISTERED"
     EGI_INJECTION_ASSISTED_REGISTRATION = "EGI_INJECTION_ASSISTED_REGISTRATION"
     EGI_SCHEMA_MISMATCH = "EGI_SCHEMA_MISMATCH"
+    # Manifest gate (per-turn cryptographic authorization gate)
+    MANIFEST_SIGNATURE_INVALID = "MANIFEST_SIGNATURE_INVALID"
     # Context window
     CONTEXT_OVERFLOW = "CONTEXT_WINDOW_OVERFLOW"
-    # Config
+    # Config / streaming
     PASSTHROUGH_MODE_ACTIVE = "SECURITY_CONFIG_ADVISORY_PASSTHROUGH"
+    PARTIAL_SCAN_MODE_ACTIVE = "SECURITY_CONFIG_ADVISORY_PARTIAL_SCAN"
     # Cross-turn L3
     CROSS_TURN_EXFILTRATION = "CROSS_TURN_EXFILTRATION_PATH"
     SPLIT_EXFILTRATION = "SPLIT_EXFILTRATION_PATTERN"
-    # Self-security
+    # L4 memory contamination
+    CONTAMINATED_MEMORY_ACTIVE = "CONTAMINATED_MEMORY_ACTIVE"
+    # MCP tool poisoning (sub-classifier of L2)
+    MCP_TOOL_POISONED = "MCP_TOOL_POISONED"
+    # Multi-agent delegation / cross-agent
+    CROSS_AGENT_TRIFECTA = "CROSS_AGENT_TRIFECTA"
+    CONTEXT_CONTAMINATION_PROPAGATION = "CONTEXT_CONTAMINATION_PROPAGATION"
+    UNAUTHORIZED_AGENT_SPAWN = "UNAUTHORIZED_AGENT_SPAWN"
+    # Self-security / runtime
     RUNTIME_INTEGRITY_FAILURE = "RUNTIME_INTEGRITY_FAILURE"
     CONFIG_TAMPER = "CONFIG_TAMPER_DETECTED"
     TELEMETRY_GAP = "TELEMETRY_SUPPRESSION_DETECTED"
+    INSPECTION_TIMEOUT = "INSPECTION_TIMEOUT_EXCEEDED"
+    TURN_SIZE_EXCEEDED = "TURN_SIZE_LIMIT_EXCEEDED"
 
 
 class OverflowAction(str, Enum):
     BLOCK = "BLOCK"
     PARTIAL_SCAN = "PARTIAL_SCAN"
+
+
+class TrustLevel(str, Enum):
+    """Trust classification for inbound content / memory writes."""
+    TRUSTED = "trusted"
+    UNTRUSTED = "untrusted"
+    UNKNOWN = "unknown"
+
+
+class AgentType(str, Enum):
+    """Role of an agent in a multi-agent delegation graph."""
+    ORCHESTRATOR = "orchestrator"
+    SUBAGENT = "subagent"
+    TOOL_AGENT = "tool_agent"
 
 
 # ── Message / Tool models ──────────────────────────────────────────────────────
@@ -102,6 +129,25 @@ class DataSource(BaseModel):
     name: str
     classification: str                 # PII | CONFIDENTIAL | SECRET | INTERNAL
     description: str = ""
+
+
+class MemoryToolConfig(BaseModel):
+    """
+    L4 memory contamination configuration for a single tool.
+
+    Declare which of an agent's tools read from or write to persistent
+    memory so Cerberus can track taint propagation across sessions.
+
+    ``node_id_field`` and ``content_field`` are the argument names Cerberus
+    consults to derive the memory node identifier and the content hash. If
+    either is missing at runtime, Cerberus falls back to a small set of
+    common field names (``key`` / ``id`` / ``nodeId`` / ``memoryKey`` for the
+    node id; ``value`` / ``content`` / ``data`` for content).
+    """
+    tool_name: str
+    operation: str                      # "read" | "write"
+    node_id_field: str | None = None    # e.g. "key"
+    content_field: str | None = None    # e.g. "value"
 
 
 # ── Detection results ──────────────────────────────────────────────────────────
@@ -206,13 +252,53 @@ class InspectionResult(BaseModel):
 
 
 class ObserveConfig(BaseModel):
-    """Telemetry configuration."""
+    """Telemetry configuration.
+
+    Cerberus Observe is the tamper-evident telemetry path. Events are signed
+    with an HMAC-SHA256 key and written as NDJSON. Guard (or any verifier)
+    re-computes the signature to detect log tampering and monitors sequence
+    numbers to detect suppression.
+
+    Key material:
+      * ``signing_key_path`` — if set, Observe loads the signing key from the
+        given path (32 bytes). The file must be readable only by the running
+        user. This is the production mode.
+      * ``signing_key_env`` — if set and ``signing_key_path`` is unset,
+        Observe reads a hex- or base64-encoded key from the environment.
+      * If neither is set, Observe generates an ephemeral key in memory and
+        emits a ``TELEMETRY_GAP``-level warning: signatures will be
+        *unverifiable by any external party*. This is development-only.
+
+    Air-gap mode:
+      * ``airgap_mode = True`` switches off every network emitter (SIEM forward,
+        HTTP forwarders, etc.) regardless of other config, encrypts every
+        NDJSON record with AES-256-GCM using ``encryption_key_path``, and
+        enforces daily rotation + ``retention_days`` deletion of older logs.
+        This is the mode federal/classified deployments use.
+    """
     enabled: bool = True
-    # LOCAL_ONLY | LOCAL_PLUS_SIEM | LOCAL_PLUS_SYSLOG
+    # LOCAL_ONLY | LOCAL_PLUS_SIEM | LOCAL_PLUS_SYSLOG | DISABLED
     mode: str = "LOCAL_ONLY"
     siem_endpoint: str | None = None
     log_path: str = "/var/log/cerberus/events"
     emit_partial_signals: bool = True
+
+    # Tamper-evident signing key custody
+    signing_key_path: str | None = None
+    signing_key_env: str | None = None
+    # If True, allow the ephemeral-key fallback and only log a warning.
+    # If False (default), Cerberus will raise at startup when no key material
+    # is provided AND the user set ``enabled=True``. This preserves the
+    # "tamper-evident" property advertised in the spec.
+    allow_ephemeral_signing_key: bool = True
+
+    # Air-gapped / offline mode (Sprint 5)
+    airgap_mode: bool = False
+    encryption_key_path: str | None = None
+    encryption_key_env: str | None = None
+    retention_days: int = 365
+    rotation_interval_s: int = 86_400              # 24 hours
+    verify_sequence_continuity: bool = True
 
 
 class CerberusConfig(BaseModel):
@@ -233,6 +319,28 @@ class CerberusConfig(BaseModel):
     l3_behavioral_intent_threshold: float = 0.60
     cross_turn_data_flow_enabled: bool = True
     cross_turn_retention_turns: int = 10            # how many turns to track data flow tokens
+
+    # Self-hardening (Sprint 7): bound inspection latency and input size.
+    # Fail-secure: exceeding either limit returns a BLOCKED result with a
+    # dedicated event. These are the "detectors cannot hang forever" and
+    # "caller cannot DoS the inspector with a 1GB turn" guarantees.
+    inspection_timeout_ms: int = 500               # 0 = disabled
+    max_turn_bytes: int = 10 * 1024 * 1024         # 10MB hard cap; 0 = disabled
+
+    # Manifest gate (v1.3.0 TS parity): if True, every turn verifies the
+    # signed EGI manifest before any detector runs. Any signature failure
+    # short-circuits to BLOCKED with MANIFEST_SIGNATURE_INVALID.
+    manifest_gate_enabled: bool = True
+
+    # L4 memory contamination (Sprint 2): declare the tools that read/write
+    # agent memory so Cerberus can track taint across sessions.
+    memory_tools: list[MemoryToolConfig] = Field(default_factory=list)
+    # Persistent provenance ledger path. If None, an in-memory ledger is used
+    # and cross-process / cross-restart taint detection is disabled.
+    provenance_ledger_path: str | None = None
+
+    # MCP tool poisoning scanner (Sprint 6 L2 sub-classifier)
+    mcp_scanner_enabled: bool = True
 
     # Timing side-channel hardening
     min_response_ms: int = 0                        # 0 = disabled; set >0 for constant-time
