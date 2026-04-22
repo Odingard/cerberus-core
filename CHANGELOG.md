@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Python SDK (`cerberus-ai`) — v1.3.0 spec completion
+
+The Python SDK is now at feature parity with the v1.3.0 TypeScript SDK
+for the runtime-security middleware surface (embeddable detectors +
+Observe + EGI + adapters). All changes are additive and backward
+compatible; no existing public API was removed.
+
+#### Added
+
+- **Async non-blocking inspection.**
+  `Cerberus.inspect_async_nonblocking()` returns an `InspectionHandle`
+  that the caller can poll, `handle.result(timeout=…)`, or attach
+  `handle.on_complete(...)` / `handle.on_block(...)` callbacks to.
+  Lets the agent keep generating while inspection runs on a worker
+  thread; the verdict is still required before any outbound tool call.
+- **Three-way streaming mode.** `StreamingMode.BUFFER_ALL` (default) /
+  `PARTIAL_SCAN` / `PASSTHROUGH` wired end-to-end. `PASSTHROUGH` and
+  `PARTIAL_SCAN` emit a startup advisory event
+  (`SECURITY_CONFIG_ADVISORY_PASSTHROUGH` /
+  `SECURITY_CONFIG_ADVISORY_PARTIAL_SCAN`) so operators can detect
+  relaxed-safety deployments in the audit log.
+- **Inspection timeout + per-turn size gate.** New
+  `CerberusConfig.inspection_timeout_ms` and
+  `CerberusConfig.max_turn_bytes`. Slow detectors are interrupted and
+  the turn is BLOCKED with `INSPECTION_TIMEOUT`; oversized turns are
+  BLOCKED with `TURN_SIZE_EXCEEDED`. Both are fail-secure.
+- **Per-turn manifest gate.** `verify_manifest_before_turn()` runs as a
+  hard BLOCK before any detector when a signed delegation graph is
+  bound; `MANIFEST_SIGNATURE_INVALID` replaces the prior soft violation.
+- **Tamper-evident Observe.** `ObserveEmitter` now persists its HMAC
+  signing key from `signing_key_path` / `signing_key_env` and exposes a
+  public `ObserveVerifier` so an external auditor (or the Guard
+  service) can re-compute signatures and detect tampering or
+  suppression. When configured without a persistent key the emitter
+  emits a `TELEMETRY_GAP` startup warning; the legacy
+  `allow_ephemeral_signing_key` default is preserved for dev.
+- **Air-gapped Observe.** `ObserveConfig.airgap_mode=True` encrypts
+  every NDJSON line with AES-256-GCM under
+  `encryption_key_path` / `encryption_key_env`, disables SIEM forward,
+  rotates the log per `rotation_interval_s`, and enforces
+  `retention_days`.
+- **L4 memory contamination.** `L4Detector` + in-memory
+  `ContaminationGraph` + thread-safe `ProvenanceLedger` (SQLite).
+  `Cerberus.inspect_memory_tool_result(...)` feeds a completed memory
+  tool through the detector and emits `CONTAMINATED_MEMORY_ACTIVE`
+  when a read surfaces a node whose lineage contains an untrusted
+  ancestor from a different session.
+- **Multi-agent EGI correlation.** `Cerberus.bind_delegation_graph()`
+  binds a signed graph; the inspector then runs three pure
+  cross-agent detectors per turn:
+  `detect_cross_agent_trifecta` (L1∧L2∧L3 split across ≥ 2 agents),
+  `detect_context_contamination` (L2 propagation through a delegation
+  edge), and `detect_unauthorized_agent_spawn` (agent not in the signed
+  graph). Emits `CROSS_AGENT_TRIFECTA`,
+  `CONTEXT_CONTAMINATION_PROPAGATION`, and
+  `UNAUTHORIZED_AGENT_SPAWN` respectively.
+- **MCP tool-poisoning scanner.** `scan_tool_descriptions()` runs at
+  registration time; `check_tool_call_poisoning()` runs per-invocation.
+  Detects hidden-instruction tags, sensitive-file references,
+  cross-tool manipulation, data-routing directives, and zero-width
+  obfuscation. Emits `MCP_TOOL_POISONED`.
+- **Adapters.** `cerberus_ai.integrations.llamaindex`,
+  `cerberus_ai.integrations.autogen`, and
+  `cerberus_ai.integrations.langgraph` — one-line attachment to
+  LlamaIndex engines, AutoGen `ConversableAgent`s, and LangGraph
+  `CompiledStateGraph`s, matching the existing LangChain / CrewAI /
+  OpenAI-agents adapter surface.
+
+#### Changed / Fixed
+
+- **Version drift.** `cerberus_ai.__version__` is now sourced from
+  `pyproject.toml` and reports `1.3.0` (was `1.1.3`). A regression
+  test asserts the two stay in lock-step.
+- **Observe signature payload.** `_sign_event` now uses the enum
+  `.value` for `event_type` in the canonical payload so records signed
+  on Python 3.11+ round-trip through `ObserveVerifier.verify()`.
+- **Test suite.** 202 tests pass (was 171 baseline); new
+  `tests/unit/test_p0_features.py` + `tests/unit/test_p1_features.py`
+  cover every item above. Lint (`ruff check cerberus_ai/`) and strict
+  type check (`mypy cerberus_ai/ --ignore-missing-imports`) are clean.
+
 ## [1.3.0] - 2026-04-17
 
 ### Added
