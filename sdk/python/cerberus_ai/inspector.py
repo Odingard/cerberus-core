@@ -112,7 +112,14 @@ class CerberusInspector:
             data_sources=config.data_sources,
             declared_tools=config.declared_tools,
         )
-        self._l2 = L2Detector()
+        # v1.4 Delta #2 — opt-in ML-backed L2 classifier. Factory
+        # returns None when disabled, raises on startup if enabled
+        # with missing paths (fail-closed on config error).
+        from cerberus_ai.classifiers.ml_injection import (
+            build_ml_classifier_from_config,
+        )
+        self._ml_injection = build_ml_classifier_from_config(config)
+        self._l2 = L2Detector(ml_classifier=self._ml_injection)
         self._l3 = L3Detector(
             declared_tools=config.declared_tools,
             intent_threshold=config.l3_behavioral_intent_threshold,

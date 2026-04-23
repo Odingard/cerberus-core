@@ -138,6 +138,28 @@ call sites, and which ones are already wrapped?*
 - Runtime discovery (OTLP / eBPF) and the cluster scanner are
   out-of-scope for Delta #1 — they ship in a later delta.
 
+Delta #2 — **ML-backed L2 classifier**:
+
+- `cerberus_ai.classifiers.ml_injection.MLInjectionClassifier` —
+  optional ONNX-backed prompt-injection classifier that scores every
+  untrusted-role message on a `[0.0, 1.0]` confidence. Fused into the
+  existing L2 regex score via `max()`; regex-only deployments see no
+  behaviour change.
+- `CerberusConfig.ml_injection_enabled` /
+  `ml_injection_model_path` / `ml_injection_tokenizer_path` /
+  `ml_injection_threshold` (default 0.75) /
+  `ml_injection_max_latency_ms` (default 30).
+- New `[ml]` extras group (`onnxruntime`, `tokenizers`, `numpy`).
+  Stock `pip install cerberus-ai` keeps zero ML code loaded.
+- **Fail-open at inference** (any exception → 0.0, regex L2 still
+  authoritative) and **fail-closed at startup** (a missing model path
+  raises before the first turn). Latency-bounded: inference that
+  exceeds the budget returns 0.0 and logs a warning rather than
+  stalling the inspector.
+- `predict_override` callable lets tests and operators run a custom
+  model (gRPC server, different framework, deterministic fixture)
+  without subclassing or carrying ONNX weights in the repo.
+
 ### Python SDK (`cerberus-ai`) — v1.3.0 spec completion
 
 The Python SDK is now at feature parity with the v1.3.0 TypeScript SDK

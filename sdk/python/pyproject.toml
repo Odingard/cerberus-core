@@ -41,6 +41,14 @@ openai = ["openai>=1.50.0"]
 anthropic = ["anthropic>=0.40.0"]
 google = ["google-generativeai>=0.8.0"]
 prometheus = ["prometheus-client>=0.20.0"]
+# v1.4 Delta #2 — ML-backed L2 classifier. Opt-in; no weights ship
+# with the OSS repo, operators point the classifier at a model file
+# they download separately.
+ml = [
+    "onnxruntime>=1.16.0",
+    "tokenizers>=0.15.0",
+    "numpy>=1.26.0",
+]
 all = [
     "cerberus-ai[langchain]",
     "cerberus-ai[crewai]",
@@ -50,6 +58,7 @@ all = [
     "cerberus-ai[anthropic]",
     "cerberus-ai[google]",
     "cerberus-ai[prometheus]",
+    "cerberus-ai[ml]",
 ]
 dev = [
     "pytest>=8.0.0",
