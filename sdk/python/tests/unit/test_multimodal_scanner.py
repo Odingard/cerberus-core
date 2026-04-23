@@ -26,6 +26,23 @@ from cerberus_ai.detectors.l2 import L2Detector
 from cerberus_ai.models import CerberusConfig, Message
 
 
+@pytest.fixture(autouse=True)
+def _bypass_multimodal_import_probes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default every test to no-op :func:`_require_pillow` /
+    :func:`_require_pypdf` so scanner-logic tests don't depend
+    on the ``[multimodal]`` extras being installed in the CI image.
+
+    Tests that specifically exercise the fail-closed probe contract
+    re-install a raising implementation inside the test body.
+    """
+    from cerberus_ai.classifiers import multimodal as mm
+
+    monkeypatch.setattr(mm, "_require_pillow", lambda: None)
+    monkeypatch.setattr(mm, "_require_pypdf", lambda: None)
+
+
 # ── ImageScanner ───────────────────────────────────────────────────────────────
 
 
@@ -286,6 +303,51 @@ def test_factory_builds_image_and_pdf_by_default_when_enabled() -> None:
     assert s._image is not None       # type: ignore[attr-defined]
     assert s._pdf is not None         # type: ignore[attr-defined]
     assert s._audio is None           # type: ignore[attr-defined]
+
+
+def test_factory_fails_closed_when_image_enabled_but_pillow_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: the factory must refuse to start when ``[multimodal]``
+    extras are missing rather than silently building a scanner that
+    produces no evidence. Silent degradation in a security product is
+    worse than hard-failing — the operator has no signal that
+    coverage dropped.
+    """
+    from cerberus_ai.classifiers import multimodal as mm
+
+    def _raise() -> None:
+        raise ImportError(
+            "multimodal_image_enabled=True but Pillow is not installed."
+        )
+
+    monkeypatch.setattr(mm, "_require_pillow", _raise)
+
+    c = CerberusConfig(multimodal_enabled=True)
+    with pytest.raises(ImportError, match="Pillow is not installed"):
+        build_multimodal_scanner_from_config(c)
+
+
+def test_factory_fails_closed_when_pdf_enabled_but_pypdf_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same fail-closed contract for pypdf."""
+    from cerberus_ai.classifiers import multimodal as mm
+
+    def _raise() -> None:
+        raise ImportError(
+            "multimodal_pdf_enabled=True but pypdf is not installed."
+        )
+
+    monkeypatch.setattr(mm, "_require_pypdf", _raise)
+
+    # Disable the image probe to isolate the pdf failure path.
+    c = CerberusConfig(
+        multimodal_enabled=True,
+        multimodal_image_enabled=False,
+    )
+    with pytest.raises(ImportError, match="pypdf is not installed"):
+        build_multimodal_scanner_from_config(c)
 
 
 def test_factory_fails_closed_on_audio_without_override() -> None:
