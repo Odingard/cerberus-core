@@ -23,7 +23,10 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from cerberus_ai.classifiers.multimodal import MultiModalOverrides
 
 from cerberus_ai.async_inspect import InspectionHandle
 from cerberus_ai.classifiers.mcp_scanner import (
@@ -99,6 +102,7 @@ class CerberusInspector:
         config: CerberusConfig,
         observe: ObserveEmitter,
         agent_id: str | None = None,
+        multimodal_overrides: MultiModalOverrides | None = None,
     ) -> None:
         self._session_id = session_id
         self._config = config
@@ -121,11 +125,15 @@ class CerberusInspector:
         self._ml_injection = build_ml_classifier_from_config(config)
         # v1.4 Delta #3 — optional multi-modal L2 scanner. Factory
         # returns None when disabled; raises at startup if enabled
-        # but misconfigured (fail-closed on config error).
+        # but misconfigured (fail-closed on config error). Overrides
+        # carry operator-supplied OCR + audio-transcribe callables;
+        # they must flow through the public Cerberus() surface.
         from cerberus_ai.classifiers.multimodal import (
             build_multimodal_scanner_from_config,
         )
-        self._multimodal = build_multimodal_scanner_from_config(config)
+        self._multimodal = build_multimodal_scanner_from_config(
+            config, overrides=multimodal_overrides,
+        )
         self._l2 = L2Detector(
             ml_classifier=self._ml_injection,
             multimodal_scanner=self._multimodal,
