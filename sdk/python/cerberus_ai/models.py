@@ -388,3 +388,18 @@ class CerberusConfig(BaseModel):
 
     # Split exfiltration threshold (bytes)
     split_exfil_threshold_bytes: int = 10_240  # 10KB default
+
+    # v1.4 Delta #3 — Multi-modal L2 scanners.
+    # Off by default; enable to route image EXIF / XMP, PDF text
+    # layers, and audio transcripts through the L2 regex library so
+    # an image whose ``ImageDescription`` reads
+    # "Ignore all previous instructions" is caught by the same
+    # detector that would catch it in a chat message. Image + PDF
+    # only require the ``[multimodal]`` extras; audio additionally
+    # requires a transcription override (no speech-to-text model
+    # ships in the OSS repo).
+    multimodal_enabled: bool = False
+    multimodal_image_enabled: bool = True
+    multimodal_pdf_enabled: bool = True
+    multimodal_audio_enabled: bool = False
+    multimodal_max_bytes: int = 10 * 1024 * 1024   # 10 MB per attachment
