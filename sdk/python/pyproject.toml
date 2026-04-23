@@ -40,6 +40,7 @@ llamaindex = ["llama-index-core>=0.12.0"]
 openai = ["openai>=1.50.0"]
 anthropic = ["anthropic>=0.40.0"]
 google = ["google-generativeai>=0.8.0"]
+prometheus = ["prometheus-client>=0.20.0"]
 all = [
     "cerberus-ai[langchain]",
     "cerberus-ai[crewai]",
@@ -48,6 +49,7 @@ all = [
     "cerberus-ai[openai]",
     "cerberus-ai[anthropic]",
     "cerberus-ai[google]",
+    "cerberus-ai[prometheus]",
 ]
 dev = [
     "pytest>=8.0.0",
@@ -56,6 +58,7 @@ dev = [
     "mypy>=1.10.0",
     "ruff>=0.6.0",
     "httpx[mock]>=0.27.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [project.urls]

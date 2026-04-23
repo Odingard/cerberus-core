@@ -1,0 +1,75 @@
+# Alertmanager configuration for Cerberus
+#
+# Default: routes all alerts to a log receiver (safe out-of-box default).
+# To enable real notifications, uncomment and configure one of:
+#   - Slack webhook
+#   - PagerDuty
+#   - Email (SMTP)
+#
+# Docs: https://prometheus.io/docs/alerting/latest/configuration/
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'log'
+
+  routes:
+    # Critical security alerts fire immediately, repeat every hour
+    - matchers:
+        - severity = critical
+        - team = security
+      receiver: 'log'
+      group_wait: 0s
+      repeat_interval: 1h
+
+    # Platform alerts (missing metrics, high volume) use defaults
+    - matchers:
+        - team = platform
+      receiver: 'log'
+
+receivers:
+  # Default: log-only (no external notifications)
+  # Alerts are still visible in Grafana and Alertmanager UI.
+  - name: 'log'
+    webhook_configs: []
+
+  # ── Slack ─────────────────────────────────────────────────────────────
+  # - name: 'slack'
+  #   slack_configs:
+  #     - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+  #       channel: '#cerberus-alerts'
+  #       title: '[{{ .Status | toUpper }}] {{ .CommonAnnotations.summary }}'
+  #       text: '{{ .CommonAnnotations.description }}'
+  #       send_resolved: true
+
+  # ── PagerDuty ─────────────────────────────────────────────────────────
+  # - name: 'pagerduty'
+  #   pagerduty_configs:
+  #     - routing_key: 'YOUR_PAGERDUTY_INTEGRATION_KEY'
+  #       description: '{{ .CommonAnnotations.summary }}'
+  #       details:
+  #         description: '{{ .CommonAnnotations.description }}'
+  #         runbook: '{{ .CommonAnnotations.runbook }}'
+
+  # ── Email ─────────────────────────────────────────────────────────────
+  # - name: 'email'
+  #   email_configs:
+  #     - to: 'security@yourcompany.com'
+  #       from: 'cerberus-alerts@yourcompany.com'
+  #       smarthost: 'smtp.yourcompany.com:587'
+  #       auth_username: 'cerberus-alerts@yourcompany.com'
+  #       auth_password: 'YOUR_SMTP_PASSWORD'
+  #       send_resolved: true
+
+inhibit_rules:
+  # Suppress warning when critical is already firing for the same alert
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ['alertname']

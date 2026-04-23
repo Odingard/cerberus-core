@@ -1,0 +1,164 @@
+groups:
+  - name: cerberus.security
+    interval: 30s
+    rules:
+
+      # ── Block rate spike ───────────────────────────────────────────────
+      # Fires when >10% of tool calls are being blocked over a 5-minute
+      # window. A sudden spike usually means an active attack in progress.
+      - alert: CerberusBlockRateHigh
+        expr: |
+          (
+            sum(rate(cerberus_tool_calls_blocked_total[5m]))
+            /
+            clamp_min(sum(rate(cerberus_tool_calls_total[5m])), 0.0001)
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Cerberus block rate elevated ({{ $value | humanizePercentage }})"
+          description: >
+            More than 10% of AI agent tool calls are being blocked over
+            the last 5 minutes. Current block rate:
+            {{ $value | humanizePercentage }}. This may indicate an
+            active prompt injection or exfiltration attempt.
+          runbook: "Grafana → Cerberus → Block Rate panel. Filter by tool."
+
+      # Critical: >50% block rate
+      - alert: CerberusBlockRateCritical
+        expr: |
+          (
+            sum(rate(cerberus_tool_calls_blocked_total[5m]))
+            /
+            clamp_min(sum(rate(cerberus_tool_calls_total[5m])), 0.0001)
+          ) > 0.50
+        for: 1m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Cerberus block rate critical ({{ $value | humanizePercentage }})"
+          description: >
+            Over 50% of AI agent tool calls are being blocked in the
+            last 5 minutes. This is likely an active attack.
+          runbook: "Immediately review agent sessions. Switch alertMode to 'interrupt'."
+
+      # ── Risk score sustained high ──────────────────────────────────────
+      # Fires when the average risk score stays at 2+ for 10 minutes.
+      # Score of 2 means two of L1/L2/L3/L4 are consistently firing —
+      # one signal away from the Lethal Trifecta threshold.
+      - alert: CerberusRiskScoreElevated
+        expr: |
+          (
+            sum(rate(cerberus_risk_score_sum[5m]))
+            /
+            clamp_min(sum(rate(cerberus_risk_score_count[5m])), 0.0001)
+          ) >= 2
+        for: 10m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Cerberus average risk score elevated ({{ $value }})"
+          description: >
+            The average risk score has been ≥2/4 for the last 10
+            minutes. At score 3 the Lethal Trifecta fires. Current
+            average: {{ $value }}/4.
+          runbook: "Grafana → Per-Tool Risk table. Look for consistent L1+L2 signal on untrusted tools."
+
+      # ── Lethal Trifecta detected ───────────────────────────────────────
+      # Fires the moment any call reaches score 3 (L1+L2+L3 all active).
+      # If alertMode is 'interrupt' this call was already blocked.
+      # If alertMode is 'log' or 'alert' the data may have left the system.
+      - alert: CerberusLethalTrifectaDetected
+        expr: |
+          sum(increase(cerberus_tool_calls_blocked_total[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Cerberus Lethal Trifecta detected — tool call blocked"
+          description: >
+            Cerberus has blocked at least one tool call in the last 5
+            minutes. L1 (privileged data) + L2 (injection) + L3
+            (exfiltration) all fired in the same agent session. The
+            call was blocked before data left the system.
+          runbook: "Grafana → Per-Tool Summary. Pull the session_id from the corresponding Observe event."
+
+      # ── Manifest gate failures ─────────────────────────────────────────
+      # Fires on any cryptographic delegation-graph tampering detection.
+      # This is a hard BLOCK signal — a manifest signature did not
+      # verify, which means the agent graph has been altered mid-run.
+      - alert: CerberusManifestGateFailure
+        expr: |
+          sum(increase(cerberus_manifest_gate_failures_total[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Cerberus manifest-gate failure — delegation graph tamper suspected"
+          description: >
+            One or more per-turn manifest signatures failed to verify.
+            Every affected turn was hard-BLOCKED before any detector
+            ran. Investigate the signing-key custody and the agent
+            bootstrap chain immediately.
+          runbook: "Verify signing-key file permissions. Check for unauthorized agent spawns in the same window."
+
+      # ── No data / collector down ───────────────────────────────────────
+      # Fires if Cerberus stops emitting metrics for 5 minutes.
+      - alert: CerberusMetricsMissing
+        expr: |
+          absent(cerberus_tool_calls_total)
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Cerberus metrics missing — instrumentation may be down"
+          description: >
+            No cerberus_tool_calls_total metric has been received for 5
+            minutes. Either the application is down, the Python
+            Prometheus exporter is disabled, or the OTel Collector /
+            Prometheus scrape pipeline has failed.
+          runbook: "docker logs cerberus-otel-collector ; curl http://host.docker.internal:9464/metrics"
+
+      # ── High call volume ───────────────────────────────────────────────
+      # Fires if tool call rate exceeds 100/sec — useful for capacity
+      # planning or detecting runaway agent loops.
+      - alert: CerberusHighCallVolume
+        expr: |
+          sum(rate(cerberus_tool_calls_total[1m])) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Cerberus high tool call volume ({{ $value | humanize }} calls/sec)"
+          description: >
+            AI agent tool call rate exceeds 100/sec sustained for 5
+            minutes. This may indicate a runaway agent loop or an
+            unexpected traffic spike.
+          runbook: "Check agent logs for looping behavior. Consider adding rate limits to tool executors."
+
+      # ── Cross-agent trifecta ──────────────────────────────────────────
+      # Fires on every cross-agent Lethal Trifecta correlation — L1+L2+L3
+      # split across two or more agents in the same signed delegation
+      # graph. Rare, high-signal, always worth paging on.
+      - alert: CerberusCrossAgentTrifecta
+        expr: |
+          sum(increase(cerberus_cross_agent_trifecta_total[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Cerberus cross-agent Lethal Trifecta"
+          description: >
+            Privileged data, untrusted injection, and outbound intent
+            co-occurred across two or more agents of the same session's
+            delegation graph.
+          runbook: "Review the session's signed manifest history. Audit inter-agent delegation edges for injection propagation."

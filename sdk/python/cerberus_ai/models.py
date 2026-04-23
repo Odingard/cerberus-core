@@ -327,6 +327,15 @@ class CerberusConfig(BaseModel):
     inspection_timeout_ms: int = 500               # 0 = disabled
     max_turn_bytes: int = 10 * 1024 * 1024         # 10MB hard cap; 0 = disabled
 
+    # Prometheus exporter (v1.4 Delta #4). When enabled, the SDK starts a
+    # background HTTP server exposing /metrics in the Prometheus text
+    # format. Metric names match the shipped Grafana dashboard at
+    # ``monitoring/grafana/dashboards/cerberus.json``. Requires the
+    # ``prometheus`` extras: ``pip install 'cerberus-ai[prometheus]'``.
+    prometheus_enabled: bool = False
+    prometheus_port: int = 9464
+    prometheus_host: str = "0.0.0.0"  # noqa: S104 — metrics endpoint, intentionally public
+
     # Manifest gate (v1.3.0 TS parity): if True, every turn verifies the
     # signed EGI manifest before any detector runs. Any signature failure
     # short-circuits to BLOCKED with MANIFEST_SIGNATURE_INVALID.

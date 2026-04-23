@@ -103,6 +103,18 @@ class Cerberus:
         self._config = config or CerberusConfig()
         self._session_id = session_id or str(uuid.uuid4())
         self._observe = ObserveEmitter(self._config.observe)
+        self._prometheus: Any = None
+        if self._config.prometheus_enabled:
+            # Lazy-import so prometheus_client is only required when the
+            # exporter is actually turned on. Raises a clear ImportError
+            # if the 'prometheus' extras aren't installed.
+            from cerberus_ai.telemetry.prometheus import PrometheusExporter
+            self._prometheus = PrometheusExporter(
+                observe=self._observe,
+                port=self._config.prometheus_port,
+                host=self._config.prometheus_host,
+            )
+            self._prometheus.increment_active_sessions(1)
         self._inspector = CerberusInspector(
             session_id=self._session_id,
             config=self._config,
@@ -317,6 +329,17 @@ class Cerberus:
 
     def close(self) -> None:
         self._inspector.close()
+        if self._prometheus is not None:
+            try:
+                self._prometheus.increment_active_sessions(-1)
+            finally:
+                self._prometheus.close()
+                self._prometheus = None
+
+    @property
+    def prometheus_exporter(self) -> Any:
+        """The :class:`PrometheusExporter` bound to this instance, or None."""
+        return self._prometheus
 
     # ── Properties ────────────────────────────────────────────────────────────
 

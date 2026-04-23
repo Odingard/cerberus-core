@@ -1,0 +1,53 @@
+# OpenTelemetry Collector configuration for Cerberus
+#
+# Receives OTLP spans and metrics from the Cerberus TypeScript SDK and
+# exports metrics to Prometheus. Python SDK users do NOT need this —
+# they can scrape the SDK's direct /metrics endpoint instead.
+#
+# TS SDK setup (abbreviated):
+#   const traceProvider = new NodeTracerProvider({...});
+#   const meterProvider = new MeterProvider({
+#     readers: [new PeriodicExportingMetricReader({
+#       exporter: new OTLPMetricExporter({ url: 'http://localhost:4318/v1/metrics' }),
+#     })],
+#   });
+#   guard(tools, { alertMode: 'interrupt', opentelemetry: true });
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+
+exporters:
+  prometheus:
+    endpoint: '0.0.0.0:8889'
+    namespace: cerberus
+    const_labels:
+      service: cerberus-ai
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
