@@ -372,8 +372,12 @@ class MultiModalScanner:
             data, mime = _file_bytes_from_part(part)
             if data is None:
                 return None
-            if mime and "pdf" not in mime.lower():
-                # Not a PDF — nothing to scan here today.
+            if not mime or "pdf" not in mime.lower():
+                # Either not a PDF or MIME unknown — skip rather than
+                # speculatively scan arbitrary binary for PDF action
+                # markers (``/JS``, ``/OpenAction`` …), which will
+                # false-positive on non-PDF containers (ZIP, DOCX,
+                # images) that happen to embed those byte sequences.
                 return None
             return self._pdf.scan(data)
 
