@@ -387,6 +387,42 @@ class MultiModalScanner:
 # ── Factory ────────────────────────────────────────────────────────────────────
 
 
+def _require_pillow() -> None:
+    """Probe for Pillow at factory time.
+
+    Raises :class:`ImportError` with install guidance when the
+    ``[multimodal]`` extras group is missing. Kept as a module-
+    level function so tests can monkeypatch it without touching
+    real ``sys.modules``.
+    """
+    try:
+        import PIL  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "multimodal_image_enabled=True but Pillow is not installed. "
+            "Install the multimodal extras: "
+            "``pip install cerberus-ai[multimodal]`` "
+            "(or disable image scanning with "
+            "multimodal_image_enabled=False)."
+        ) from exc
+
+
+def _require_pypdf() -> None:
+    """Probe for pypdf at factory time. Same rationale as
+    :func:`_require_pillow`.
+    """
+    try:
+        import pypdf  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "multimodal_pdf_enabled=True but pypdf is not installed. "
+            "Install the multimodal extras: "
+            "``pip install cerberus-ai[multimodal]`` "
+            "(or disable PDF scanning with "
+            "multimodal_pdf_enabled=False)."
+        ) from exc
+
+
 def build_multimodal_scanner_from_config(
     config: Any,
     *,
@@ -396,8 +432,12 @@ def build_multimodal_scanner_from_config(
 
     Returns ``None`` when ``multimodal_enabled`` is False. Raises
     when enabled but misconfigured — an operator who asked for
-    audio scanning without a transcription override should find
-    out at startup, not three hours in.
+    audio scanning without a transcription override, or who
+    enabled image / PDF scanning without the ``[multimodal]``
+    extras, should find out at startup, not three hours in. The
+    fail-closed contract is written into the module docstring and
+    is essential: a security product that silently produces zero
+    evidence is worse than one that refuses to start.
     """
     if not getattr(config, "multimodal_enabled", False):
         return None
@@ -407,10 +447,12 @@ def build_multimodal_scanner_from_config(
 
     image: ImageScanner | None = None
     if getattr(config, "multimodal_image_enabled", True):
+        _require_pillow()
         image = ImageScanner(ocr=overrides.image_ocr, max_bytes=max_bytes)
 
     pdf: PDFScanner | None = None
     if getattr(config, "multimodal_pdf_enabled", True):
+        _require_pypdf()
         pdf = PDFScanner(max_bytes=max_bytes)
 
     audio: AudioScanner | None = None
