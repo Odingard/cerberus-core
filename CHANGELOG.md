@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### v1.4 — 2026 Threat Surface (in progress)
+
+Delta #4 — **Observability parity**: port the private Grafana dashboard
+to the OSS repo and add a first-class Prometheus exporter to the
+Python SDK so `cerberus-core` ships with a one-command observability
+stack out of the box.
+
+#### Added
+
+- **`monitoring/` stack.** A `docker compose -f monitoring/docker-compose.yml up`
+  command spins up Prometheus, Alertmanager, the OTel Collector, and a
+  Grafana with the Cerberus dashboard pre-provisioned at
+  `http://localhost:3030`. Prior art was private; this is its OSS port.
+- **Grafana dashboard** at `monitoring/grafana/dashboards/cerberus.json`
+  with Security Overview, Agent Actions Monitored, Threats Stopped,
+  Protection Rate, Avg Threat Score, Critical Detections, False
+  Positive Rate, Live Activity, Threat-Score Trend / Distribution,
+  Activity by Tool, Detections by Tool, Tool Risk Summary, Response
+  Types Over Time, Response Breakdown.
+- **Prometheus alerts** (`monitoring/alerts.yml`):
+  `CerberusLethalTrifectaDetected`, `CerberusManifestGateFailure`,
+  `CerberusCrossAgentTrifecta`, `CerberusBlockRateCritical`,
+  `CerberusBlockRateHigh`, `CerberusRiskScoreElevated`,
+  `CerberusHighCallVolume`, `CerberusMetricsMissing`. Evaluated every
+  30 s; runbook hints attached.
+- **`cerberus_ai.telemetry.prometheus.PrometheusExporter`** — a
+  background `/metrics` server that attaches as an in-process listener
+  to `ObserveEmitter` and exposes:
+  `cerberus_tool_calls_total`, `cerberus_tool_calls_blocked_total`,
+  `cerberus_risk_score` (histogram), `cerberus_inspection_duration_ms`
+  (histogram), `cerberus_manifest_gate_failures_total`,
+  `cerberus_cross_agent_trifecta_total`,
+  `cerberus_contaminated_memory_active`, `cerberus_active_sessions`,
+  `cerberus_events_total`.
+- **`CerberusConfig.prometheus_enabled/_port/_host`** — one-line
+  integration:
+  ```python
+  c = Cerberus(CerberusConfig(prometheus_enabled=True, prometheus_port=9464))
+  ```
+  The exporter starts automatically and tears down on `close()`.
+- **`ObserveEmitter.add_listener()`** — a stable in-process observer
+  hook used by the exporter and available to any downstream
+  subscriber (dashboards, SIEM bridges). Listener exceptions are
+  isolated so a buggy listener can never poison the inspector hot
+  path.
+- **`cerberus-ai[prometheus]` extras**. `prometheus-client>=0.20.0`
+  is only required when the exporter is turned on; everything else
+  stays dependency-free.
+- **13 new unit tests** in `tests/unit/test_prometheus_exporter.py`
+  covering listener registration, counter/histogram/gauge wiring, the
+  HTTP exposition endpoint, startup-advisory suppression, dashboard
+  metric-name contract, and `Cerberus.__init__/close` integration.
+
+#### Notes for operators
+
+- The Python direct exporter emits clean `cerberus_*` metric names.
+  The TypeScript SDK still emits via OTel as `cerberus_cerberus_*`;
+  `prometheus.yml` rewrites the double prefix on scrape so the
+  dashboard and alerts use one naming convention for both SDKs.
+- `prometheus_host` defaults to `0.0.0.0`. Change it to `127.0.0.1`
+  for single-host deployments.
+
 ### Python SDK (`cerberus-ai`) — v1.3.0 spec completion
 
 The Python SDK is now at feature parity with the v1.3.0 TypeScript SDK

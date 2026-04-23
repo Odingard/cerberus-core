@@ -1,0 +1,107 @@
+# Cerberus Core — Self-Host Monitoring Stack
+#
+# Services:
+#   otel-collector  — receives OTLP spans/metrics from the TS SDK (port 4318)
+#   prometheus      — scrapes metrics from the Python SDK exporter and the
+#                     OTel collector, evaluates alert rules (port 9090)
+#   alertmanager    — routes alerts to Slack/PagerDuty/email (log-only default)
+#   grafana         — pre-built Cerberus dashboard, auto-provisioned (port 3030)
+#
+# Quick start:
+#   docker compose -f monitoring/docker-compose.yml up -d
+#   open http://localhost:3030         # Grafana — no login required
+#
+# Python SDK integration:
+#   from cerberus_ai import Cerberus, CerberusConfig
+#   c = Cerberus(CerberusConfig(prometheus_enabled=True, prometheus_port=9464))
+#   # the scrape target below picks the exporter up automatically
+#
+# TypeScript SDK integration:
+#   set opentelemetry: true in guard() config and OTEL_EXPORTER_OTLP_ENDPOINT
+#   to http://localhost:4318 — the collector forwards metrics to Prometheus.
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.97.0
+    container_name: cerberus-otel-collector
+    command: ['--config=/etc/otel/config.yml']
+    volumes:
+      - ./otel-collector.yml:/etc/otel/config.yml:ro
+    ports:
+      - '4317:4317'   # OTLP gRPC
+      - '4318:4318'   # OTLP HTTP
+      - '8888:8888'   # Collector self-metrics
+      - '8889:8889'   # Prometheus exporter (scraped by Prometheus below)
+    networks:
+      - cerberus-monitoring
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: cerberus-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '9090:9090'
+    networks:
+      - cerberus-monitoring
+    depends_on:
+      - otel-collector
+      - alertmanager
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: cerberus-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - '9093:9093'
+    networks:
+      - cerberus-monitoring
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: cerberus-grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+      - GF_SERVER_HTTP_PORT=3030
+      - GF_UNIFIED_ALERTING_ENABLED=true
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '3030:3030'
+    networks:
+      - cerberus-monitoring
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+
+networks:
+  cerberus-monitoring:
+    driver: bridge

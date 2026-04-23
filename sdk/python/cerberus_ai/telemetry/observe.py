@@ -44,6 +44,7 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any, Protocol
 
@@ -164,6 +165,10 @@ class ObserveEmitter:
         self._log_path: Path | None = None
         self._aesgcm: AESGCM | None = None
         self._using_ephemeral_key = False
+        # In-process event listeners. Called synchronously inside emit();
+        # listeners MUST be fast and MUST NOT raise (exceptions are caught
+        # and logged so they cannot break the inspector hot path).
+        self._listeners: list[Callable[[SecurityEvent], None]] = []
 
         # ── Signing key custody ──────────────────────────────────────────
         key = signing_key or _load_key_bytes(
@@ -263,6 +268,17 @@ class ObserveEmitter:
         except OSError:
             return
 
+    def add_listener(self, fn: Callable[[SecurityEvent], None]) -> None:
+        """
+        Register an in-process listener that is invoked synchronously for
+        every emitted event. Used by the Prometheus exporter and any
+        other in-process subscribers (dashboards, SIEM bridges).
+
+        Listeners MUST be fast and MUST NOT raise. Exceptions are caught
+        and logged; a slow listener will slow down the inspector.
+        """
+        self._listeners.append(fn)
+
     def emit(self, event: SecurityEvent) -> None:
         if not self._config.enabled or self._config.mode == "DISABLED":
             return
@@ -277,6 +293,15 @@ class ObserveEmitter:
         with self._lock:
             self._rotate_if_due()
             self._write_line(line)
+
+        # Fan out to in-process listeners (exporters, dashboards).
+        # Exceptions are isolated so a buggy listener cannot poison the
+        # inspector hot path.
+        for listener in self._listeners:
+            try:
+                listener(event)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Observe listener raised: %s", e)
 
         logger.info(
             "cerberus_event",

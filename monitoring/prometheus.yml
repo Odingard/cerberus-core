@@ -1,0 +1,53 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    monitor: cerberus
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # ── Python SDK direct Prometheus exporter ──────────────────────────────
+  # When you start Cerberus (Python) with `prometheus_enabled=True`,
+  # the SDK exposes /metrics on `prometheus_port` (default 9464). Set
+  # CERBERUS_PROMETHEUS_TARGET to override (e.g. a sidecar hostname).
+  - job_name: cerberus-python
+    static_configs:
+      - targets: ['host.docker.internal:9464']
+        labels:
+          sdk: python
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'cerberus_.*'
+        action: keep
+
+  # ── TypeScript SDK via OTel Collector → Prometheus exporter ────────────
+  # The TS SDK emits OTLP; the collector re-exports under the `cerberus`
+  # namespace, so metrics arrive as `cerberus_cerberus_*`. Strip the
+  # double prefix so the dashboard and alerts can use a single naming
+  # convention across both SDKs.
+  - job_name: cerberus-ts-via-otel
+    static_configs:
+      - targets: ['otel-collector:8889']
+        labels:
+          sdk: typescript
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'cerberus_.*'
+        action: keep
+      - source_labels: [__name__]
+        regex: 'cerberus_cerberus_(.*)'
+        target_label: __name__
+        replacement: 'cerberus_$1'
+        action: replace
+
+  # ── OTel Collector self-metrics (debugging only) ───────────────────────
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8888']
