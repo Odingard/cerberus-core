@@ -58,6 +58,11 @@ from typing import Any
 __version__ = "1.3.0"
 
 from cerberus_ai.async_inspect import InspectionHandle, InspectionStillRunning
+from cerberus_ai.classifiers.multimodal import (
+    MultiModalOverrides,
+    MultiModalScanner,
+    ScannedArtifact,
+)
 from cerberus_ai.inspector import CerberusInspector
 from cerberus_ai.models import (
     AgentType,
@@ -98,6 +103,7 @@ class Cerberus:
         config: CerberusConfig | None = None,
         session_id: str | None = None,
         agent_id: str | None = None,
+        multimodal_overrides: MultiModalOverrides | None = None,
     ) -> None:
         self._config = config or CerberusConfig()
         self._session_id = session_id or str(uuid.uuid4())
@@ -119,6 +125,7 @@ class Cerberus:
             config=self._config,
             observe=self._observe,
             agent_id=agent_id,
+            multimodal_overrides=multimodal_overrides,
         )
 
         # Streaming-mode advisory events (BUFFER_ALL is the safe default)
@@ -360,8 +367,11 @@ __all__ = [
     "InspectionResult",
     "InspectionStillRunning",
     "MemoryToolConfig",
+    "MultiModalOverrides",
+    "MultiModalScanner",
     "ObserveEmitter",
     "ObserveVerifier",
+    "ScannedArtifact",
     "SecurityError",
     "SecurityEvent",
     "Severity",
