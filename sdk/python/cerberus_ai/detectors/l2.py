@@ -11,9 +11,13 @@ All detection is deterministic and rule-based.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from cerberus_ai.detectors.normalizer import normalize
 from cerberus_ai.models import L2Detection, Message
+
+if TYPE_CHECKING:
+    from cerberus_ai.classifiers.ml_injection import MLInjectionClassifier
 
 # ── Injection pattern library ─────────────────────────────────────────────────
 
@@ -103,7 +107,18 @@ class L2Detector:
       1. All injection patterns against normalized content
       2. Structural/encoding manipulation patterns
       3. Source context — tool results and user messages are untrusted
+      4. (optional, v1.4 Delta #2) ML-backed injection classifier —
+         catches semantically-clean adversarial content regex misses
+         (GCG/AutoDAN/PAIR suffixes, fluent NL overrides, translated
+         jailbreaks). Fused with the regex score via ``max()``;
+         regex-only deployments see no behavioural change.
     """
+
+    def __init__(
+        self,
+        ml_classifier: MLInjectionClassifier | None = None,
+    ) -> None:
+        self._ml = ml_classifier
 
     def detect(self, messages: list[Message]) -> L2Detection:
         injection_patterns: list[str] = []
@@ -155,6 +170,23 @@ class L2Detector:
                     injection_patterns.append(f"structural:{name}")
                     evidence.append(f"Structural injection indicator '{name}' in {msg.role}")
                     confidence = max(confidence, 0.75)
+
+            # Delta #2 — ML-backed scoring on untrusted roles only.
+            # Scoring trusted messages would let an attacker who hijacked
+            # the system prompt further degrade the regex signal; keeping
+            # ML to untrusted roles preserves the "defense in depth"
+            # posture.
+            if self._ml is not None and msg.role in _UNTRUSTED_ROLES:
+                score = self._ml.score(content)
+                if score >= self._ml.threshold:
+                    injection_patterns.append("ml:prompt_injection")
+                    evidence.append(
+                        f"ML classifier flagged {msg.role} message "
+                        f"(score={score:.3f} ≥ {self._ml.threshold:.2f})"
+                    )
+                    confidence = max(
+                        confidence, min(score * role_multiplier, 1.0),
+                    )
 
         return L2Detection(
             injection_patterns=list(set(injection_patterns)),

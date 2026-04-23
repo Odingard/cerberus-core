@@ -360,6 +360,19 @@ class CerberusConfig(BaseModel):
     # MCP tool poisoning scanner (Sprint 6 L2 sub-classifier)
     mcp_scanner_enabled: bool = True
 
+    # v1.4 Delta #2 — ML-backed L2 classifier.
+    # Off by default; enable with a model file downloaded separately
+    # (no weights ship in the OSS repo). When enabled the classifier
+    # scores every untrusted-role message and fuses into the regex
+    # L2 score via max(). Fail-open at inference (any exception →
+    # 0.0, regex still runs); fail-closed at startup (a missing
+    # model path raises before the first turn).
+    ml_injection_enabled: bool = False
+    ml_injection_model_path: str | None = None
+    ml_injection_tokenizer_path: str | None = None
+    ml_injection_threshold: float = 0.75
+    ml_injection_max_latency_ms: int = 30
+
     # Timing side-channel hardening
     min_response_ms: int = 0                        # 0 = disabled; set >0 for constant-time
     timing_jitter_ms: int = 0
