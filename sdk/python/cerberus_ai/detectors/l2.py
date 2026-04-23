@@ -18,6 +18,7 @@ from cerberus_ai.models import L2Detection, Message
 
 if TYPE_CHECKING:
     from cerberus_ai.classifiers.ml_injection import MLInjectionClassifier
+    from cerberus_ai.classifiers.multimodal import MultiModalScanner
 
 # ── Injection pattern library ─────────────────────────────────────────────────
 
@@ -112,13 +113,20 @@ class L2Detector:
          (GCG/AutoDAN/PAIR suffixes, fluent NL overrides, translated
          jailbreaks). Fused with the regex score via ``max()``;
          regex-only deployments see no behavioural change.
+      5. Multi-modal attachments (v1.4 Delta #3) — EXIF / XMP /
+         PDF text layers / audio transcripts routed back through
+         the same pattern library so an image whose ``ImageDescription``
+         reads "Ignore all previous instructions" is caught by the
+         same regex that catches the same string in chat.
     """
 
     def __init__(
         self,
         ml_classifier: MLInjectionClassifier | None = None,
+        multimodal_scanner: MultiModalScanner | None = None,
     ) -> None:
         self._ml = ml_classifier
+        self._mm = multimodal_scanner
 
     def detect(self, messages: list[Message]) -> L2Detection:
         injection_patterns: list[str] = []
@@ -127,7 +135,34 @@ class L2Detector:
         encoding_detected: str | None = None
 
         for msg in messages:
-            content_raw = msg.content if isinstance(msg.content, str) else str(msg.content or "")
+            # Derive the text we'll pattern-match on. If the message
+            # carries a structured content list (OpenAI / Anthropic
+            # vision + audio + file parts) hand binary parts to the
+            # multi-modal scanner and concatenate any extracted text
+            # (EXIF / XMP / PDF layer / audio transcript) into the
+            # stream so the same regex library catches injection no
+            # matter the modality.
+            content_raw = _text_content(msg.content)
+
+            if self._mm is not None and isinstance(msg.content, list):
+                for part in msg.content:
+                    if not isinstance(part, dict):
+                        continue
+                    artifact = self._mm.scan_part(part)
+                    if artifact is None:
+                        continue
+                    if artifact.extracted_text:
+                        content_raw = (
+                            content_raw + "\n" + artifact.extracted_text
+                        ).strip()
+                    if artifact.evidence:
+                        evidence.extend(artifact.evidence)
+                    if artifact.score > 0.0:
+                        injection_patterns.append(
+                            f"multimodal:{artifact.kind}"
+                        )
+                        confidence = max(confidence, artifact.score)
+
             if not content_raw.strip():
                 continue
 
@@ -194,3 +229,26 @@ class L2Detector:
             confidence=confidence,
             encoding_detected=encoding_detected,
         )
+
+
+def _text_content(content: object) -> str:
+    """Flatten :class:`Message.content` into a scannable string.
+
+    The OpenAI vision / Anthropic content-list shape mixes text and
+    binary parts; pattern matching runs over the text parts only —
+    binary parts are handed to the multi-modal scanner elsewhere
+    and their extracted text is spliced back in.
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        chunks: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    chunks.append(text)
+        return "\n".join(chunks)
+    return str(content)

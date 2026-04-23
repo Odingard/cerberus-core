@@ -160,6 +160,65 @@ Delta #2 — **ML-backed L2 classifier**:
   model (gRPC server, different framework, deterministic fixture)
   without subclassing or carrying ONNX weights in the repo.
 
+Delta #3 — **Multi-modal L2 scanners**: image / PDF / audio content
+is now first-class in the injection detector. Frontier LLMs accept
+non-text inputs natively; the regex L2 layer that catches
+"Ignore all previous instructions" in a chat message now catches
+the same string whether it arrives in an image's EXIF
+`ImageDescription`, the text layer of a PDF, or the transcript of
+a voice clip. Extracted text is fused back into the existing
+pattern library so detection rules stay in one place.
+
+#### Added
+
+- **`cerberus_ai.classifiers.multimodal`** — new module with
+  `ImageScanner`, `PDFScanner`, `AudioScanner`, and a
+  `MultiModalScanner` aggregator that dispatches OpenAI /
+  Anthropic content parts to the right scanner.
+- **Image scanning** — best-effort EXIF / XMP metadata extraction
+  via `Pillow`; suspicious metadata tags (`ImageDescription`,
+  `UserComment`, `XPComment`, `Artist`, `Software`, …) contribute
+  to an image-level risk score and are surfaced in the L2
+  evidence stream. Operators can plug in an OCR callable
+  (`MultiModalOverrides(image_ocr=…)`) to catch prompts the user
+  screenshotted from a poisoned web page.
+- **PDF scanning** — text-layer extraction via `pypdf`, plus raw-
+  bytes detection of active-content markers (`/JS`,
+  `/JavaScript`, `/OpenAction`, `/AA`, `/Launch`,
+  `/SubmitForm`, `/EmbeddedFile`) which raise the document's
+  risk score independent of the text layer and survive malformed
+  parses.
+- **Audio scanning** — override-only; a transcription callable
+  (`MultiModalOverrides(audio_transcribe=…)`) turns the clip into
+  text and hands it to the regex layer. No speech-to-text model
+  ships in the OSS repo.
+- **`CerberusConfig.multimodal_*`** fields —
+  `multimodal_enabled` (default `False`),
+  `multimodal_image_enabled`, `multimodal_pdf_enabled`,
+  `multimodal_audio_enabled`, `multimodal_max_bytes`.
+- **`L2Detector(multimodal_scanner=…)`** — walks structured
+  `Message.content` lists, passes binary parts to the scanner,
+  and splices extracted text back into the regex / ML pipeline
+  so every modality is scored by the same rule library.
+- **`[multimodal]` extras** in `pyproject.toml` —
+  `Pillow>=10.0.0`, `pypdf>=4.0.0`.
+
+#### Notes
+
+- Fail-open at scan: every scanner swallows exceptions and
+  returns an empty artifact so a malformed / oversize
+  attachment never blocks the inspector.
+- Fail-closed at startup: enabling `multimodal_audio_enabled`
+  without a transcription override raises at `Cerberus`
+  construction; enabling `multimodal_enabled` with every
+  modality disabled is also rejected.
+- Size-bounded: parts larger than `multimodal_max_bytes`
+  (default 10 MB) are skipped with a warning — an attacker
+  cannot DoS the scanner with a 1 GB video.
+- Schemas supported: OpenAI `image_url` / `input_audio` /
+  `file`, Anthropic `image` with `source.{type,data}`,
+  generic `document` parts.
+
 ### Python SDK (`cerberus-ai`) — v1.3.0 spec completion
 
 The Python SDK is now at feature parity with the v1.3.0 TypeScript SDK

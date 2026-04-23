@@ -119,7 +119,17 @@ class CerberusInspector:
             build_ml_classifier_from_config,
         )
         self._ml_injection = build_ml_classifier_from_config(config)
-        self._l2 = L2Detector(ml_classifier=self._ml_injection)
+        # v1.4 Delta #3 — optional multi-modal L2 scanner. Factory
+        # returns None when disabled; raises at startup if enabled
+        # but misconfigured (fail-closed on config error).
+        from cerberus_ai.classifiers.multimodal import (
+            build_multimodal_scanner_from_config,
+        )
+        self._multimodal = build_multimodal_scanner_from_config(config)
+        self._l2 = L2Detector(
+            ml_classifier=self._ml_injection,
+            multimodal_scanner=self._multimodal,
+        )
         self._l3 = L3Detector(
             declared_tools=config.declared_tools,
             intent_threshold=config.l3_behavioral_intent_threshold,

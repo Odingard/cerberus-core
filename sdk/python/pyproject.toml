@@ -49,6 +49,14 @@ ml = [
     "tokenizers>=0.15.0",
     "numpy>=1.26.0",
 ]
+# v1.4 Delta #3 — Multi-modal L2 scanners. Image EXIF via Pillow,
+# PDF text layer via pypdf. Audio transcription is always via
+# operator-supplied override — no speech-to-text model ships in the
+# OSS repo.
+multimodal = [
+    "Pillow>=10.0.0",
+    "pypdf>=4.0.0",
+]
 all = [
     "cerberus-ai[langchain]",
     "cerberus-ai[crewai]",
@@ -59,6 +67,7 @@ all = [
     "cerberus-ai[google]",
     "cerberus-ai[prometheus]",
     "cerberus-ai[ml]",
+    "cerberus-ai[multimodal]",
 ]
 dev = [
     "pytest>=8.0.0",
