@@ -49,48 +49,46 @@ _SKIP_DIRS: frozenset[str] = frozenset({
     ".pytest_cache", ".ruff_cache", ".cache", "site-packages",
 })
 
-# (attribute path matched against the call's dotted name, framework
-# label, model_family hint). First match wins.
+# Patterns to recognise. Each entry is (dotted-path, framework, model_family).
+# First match wins.
+#
+# **Invariant:** every pattern must be at most two dotted segments. The
+# matcher only permits leaf-name matching for 2-segment patterns (e.g.
+# ``openai.OpenAI`` → ``OpenAI(...)`` or ``x.OpenAI(...)``). A 3-segment
+# pattern like ``openai.ChatCompletion.create`` would silently match every
+# ``.create(...)`` call in user code (``db.objects.create``,
+# ``factory.create``, ``client.messages.create``) and misclassify it as
+# OpenAI — a bug we deliberately avoid. Detecting the client constructor
+# (``OpenAI()`` / ``Anthropic()``) is sufficient and far more reliable.
 _CALL_PATTERNS: tuple[tuple[str, Framework, str | None], ...] = (
-    # Raw client SDKs
+    # Raw client SDKs — constructors only, not methods.
     ("openai.OpenAI", "openai", "openai"),
     ("openai.AsyncOpenAI", "openai", "openai"),
-    ("openai.ChatCompletion.create", "openai", "openai"),
-    ("OpenAI", "openai", "openai"),
     ("anthropic.Anthropic", "anthropic", "anthropic"),
     ("anthropic.AsyncAnthropic", "anthropic", "anthropic"),
-    ("Anthropic", "anthropic", "anthropic"),
-    ("anthropic.messages.create", "anthropic", "anthropic"),
-    ("google.generativeai.GenerativeModel", "google", "google"),
+    ("google.GenerativeModel", "google", "google"),
     ("genai.GenerativeModel", "google", "google"),
-    ("GenerativeModel", "google", "google"),
     # LangChain / LangGraph
     ("langchain_openai.ChatOpenAI", "langchain", "openai"),
     ("langchain_anthropic.ChatAnthropic", "langchain", "anthropic"),
     ("langchain_google_genai.ChatGoogleGenerativeAI", "langchain", "google"),
-    ("ChatOpenAI", "langchain", "openai"),
-    ("ChatAnthropic", "langchain", "anthropic"),
-    ("langgraph.graph.StateGraph", "langgraph", None),
-    ("StateGraph", "langgraph", None),
+    ("langgraph.StateGraph", "langgraph", None),
     # Multi-agent frameworks
     ("crewai.Agent", "crewai", None),
     ("crewai.Crew", "crewai", None),
-    ("Crew", "crewai", None),
     ("autogen.ConversableAgent", "autogen", None),
     ("autogen.AssistantAgent", "autogen", None),
     ("autogen.UserProxyAgent", "autogen", None),
-    ("ConversableAgent", "autogen", None),
-    ("AssistantAgent", "autogen", None),
-    # LlamaIndex
-    ("llama_index.core.query_engine.RetrieverQueryEngine",
-     "llamaindex", None),
-    ("llama_index.core.agent.AgentRunner", "llamaindex", None),
-    ("llama_index.core.chat_engine.ChatEngine", "llamaindex", None),
-    ("VectorStoreIndex.from_documents", "llamaindex", None),
+    # LlamaIndex — constructors only. Generic-leaf methods like
+    # ``.from_documents`` / ``.as_query_engine`` are intentionally NOT
+    # patterns because they name-collide with unrelated libraries.
+    ("llama_index.RetrieverQueryEngine", "llamaindex", None),
+    ("llama_index.AgentRunner", "llamaindex", None),
+    ("llama_index.ChatEngine", "llamaindex", None),
+    ("llama_index.VectorStoreIndex", "llamaindex", None),
     # MCP client bindings
-    ("mcp.client.stdio.stdio_client", "mcp-client", None),
+    ("mcp.stdio_client", "mcp-client", None),
     ("mcp.ClientSession", "mcp-client", None),
-    ("ClientSession", "mcp-client", None),
 )
 
 # Recognised tool-declaration patterns — call sites that appear near
@@ -141,23 +139,58 @@ def _match_pattern(dotted: str) -> tuple[Framework, str | None] | None:
     """Return ``(framework, model_family)`` for a dotted call target,
     or ``None`` if nothing matches.
 
-    The matcher supports three forms so we stay robust across import
-    styles:
+    Every pattern in :data:`_CALL_PATTERNS` is exactly two segments
+    (``module.ClassName``). The matcher accepts three forms, in order:
 
-    * Exact dotted-path match (``openai.OpenAI`` → ``openai.OpenAI(...)``)
+    * Exact match against the full pattern.
     * Trailing-segment match on a dotted call
-      (``x.OpenAI(...)`` against pattern ``openai.OpenAI``)
+      (``x.OpenAI(...)`` against ``openai.OpenAI``).
     * Bare-name match for ``from pkg import Name`` style imports
-      (``OpenAI(...)`` against pattern ``openai.OpenAI``)
+      (``OpenAI(...)`` against ``openai.OpenAI``).
+
+    Leaf-only matching is only safe because every leaf is a framework
+    class name (``OpenAI``, ``Anthropic``, ``StateGraph``, ...). Adding
+    a pattern with a generic leaf like ``.create`` or ``.from_documents``
+    would cause spurious matches on unrelated code — the loader asserts
+    the two-segment invariant so we can't regress silently.
     """
     for pattern, framework, family in _CALL_PATTERNS:
         if dotted == pattern:
             return framework, family
-        if "." in pattern:
-            leaf = pattern.rsplit(".", 1)[-1]
-            if dotted.endswith("." + leaf) or dotted == leaf:
-                return framework, family
+        # Invariant enforced at module load (see _assert_pattern_shape).
+        leaf = pattern.rsplit(".", 1)[-1]
+        if (
+            dotted == leaf
+            or dotted.endswith("." + leaf)
+            or dotted.startswith(leaf + ".")
+        ):
+            # ``X.y(...)`` — classmethod / alternate-constructor style
+            # (e.g. ``VectorStoreIndex.from_documents(...)``) is routed
+            # back to the class's framework. Safe because every leaf is
+            # a specific framework class name, not a generic verb.
+            return framework, family
     return None
+
+
+def _assert_pattern_shape() -> None:
+    """Guard against regressions that silently broaden the scanner.
+
+    Every entry in :data:`_CALL_PATTERNS` must be exactly two dotted
+    segments. A three-segment pattern would leak into the leaf-match
+    branch of :func:`_match_pattern` and cause spurious false positives
+    — this assertion makes that a fail-fast import error rather than a
+    hard-to-debug runtime classification bug.
+    """
+    for pattern, _framework, _family in _CALL_PATTERNS:
+        if pattern.count(".") != 1:
+            raise AssertionError(
+                f"cerberus_ai.discover._CALL_PATTERNS: pattern {pattern!r} "
+                "must be exactly two dotted segments (module.ClassName). "
+                "See _match_pattern docstring for rationale."
+            )
+
+
+_assert_pattern_shape()
 
 
 def _is_cerberus_instantiation(dotted: str) -> bool:
