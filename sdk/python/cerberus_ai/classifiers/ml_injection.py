@@ -41,7 +41,7 @@ Design goals
 from __future__ import annotations
 
 import logging
-import time
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -181,8 +181,17 @@ class MLInjectionClassifier:
     def score(self, text: str) -> float:
         """Return the injection confidence in ``[0.0, 1.0]``.
 
-        Fail-open: any exception during inference is logged and
-        returns ``0.0`` so the regex L2 layer is still authoritative.
+        Bounded by :attr:`max_latency_ms`: inference runs on a daemon
+        worker thread and the caller is released when the budget
+        elapses. A timed-out thread is left to finish in the
+        background (no cooperative cancellation is possible for a
+        C-extension ONNX call) but never blocks the inspector beyond
+        the budget.
+
+        Fail-open: exceptions and timeouts are logged and return
+        ``0.0`` so the regex L2 layer is still authoritative. A valid
+        score that completes *within* the budget is always returned
+        — the security gain of the classifier is not discarded.
         """
         if not text or not text.strip():
             return 0.0
@@ -190,31 +199,62 @@ class MLInjectionClassifier:
         if len(text) > self._max_input_chars:
             text = text[: self._max_input_chars]
 
-        started = time.perf_counter()
-        try:
-            if self._predict_override is not None:
-                raw = float(self._predict_override(text))
-            else:
-                raw = self._run_onnx(text)
-        except Exception:   # noqa: BLE001 — fail-open by design
+        # Slot indexed by object identity of the worker; guards
+        # against a previous (timed-out) thread racing a later call
+        # and overwriting its result. Only the current worker's
+        # writes are observed.
+        outcome: dict[str, Any] = {}
+
+        def _worker() -> None:
+            try:
+                if self._predict_override is not None:
+                    outcome["value"] = float(self._predict_override(text))
+                else:
+                    outcome["value"] = self._run_onnx(text)
+            except Exception as exc:   # noqa: BLE001 — fail-open by design
+                outcome["error"] = exc
+
+        thread = threading.Thread(
+            target=_worker,
+            daemon=True,
+            name="cerberus-ml-inject",
+        )
+        thread.start()
+        thread.join(timeout=self._max_latency_ms / 1000.0)
+
+        if thread.is_alive():
+            # Budget exhausted *and* inference still running — we
+            # genuinely saved the caller from a stall. The thread
+            # keeps executing as a daemon and will be reaped on
+            # process exit; its eventual result is discarded.
             logger.warning(
-                "MLInjectionClassifier inference failed; "
-                "returning 0.0 (regex L2 unaffected)",
-                exc_info=True,
+                "MLInjectionClassifier exceeded latency budget "
+                "(>%d ms); returning 0.0 (regex L2 unaffected)",
+                self._max_latency_ms,
             )
             return 0.0
 
-        elapsed_ms = (time.perf_counter() - started) * 1000.0
-        if elapsed_ms > self._max_latency_ms:
+        err = outcome.get("error")
+        if err is not None:
             logger.warning(
-                "MLInjectionClassifier exceeded latency budget "
-                "(%.1f ms > %d ms); returning 0.0",
-                elapsed_ms, self._max_latency_ms,
+                "MLInjectionClassifier inference failed; "
+                "returning 0.0 (regex L2 unaffected)",
+                exc_info=err,
+            )
+            return 0.0
+
+        raw = outcome.get("value")
+        if raw is None:
+            # Should be unreachable — thread finished but left no
+            # result. Treat as inference failure.
+            logger.warning(
+                "MLInjectionClassifier produced no result; "
+                "returning 0.0 (regex L2 unaffected)"
             )
             return 0.0
 
         # Clamp defensively — an override function may misbehave.
-        return max(0.0, min(1.0, raw))
+        return max(0.0, min(1.0, float(raw)))
 
     def is_injection(self, text: str) -> bool:
         """Convenience: :meth:`score` ``>=`` :attr:`threshold`."""
