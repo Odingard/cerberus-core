@@ -245,6 +245,30 @@ def test_aggregator_skips_non_pdf_file_part() -> None:
     assert agg.scan_part(part) is None
 
 
+def test_aggregator_skips_file_part_with_no_mime() -> None:
+    """Regression: unknown-MIME file parts used to fall through to
+    PDFScanner, which then flagged any byte sequence containing
+    ``/JS`` / ``/OpenAction`` / ``/Launch`` etc. as an
+    active-content PDF. Non-PDF binaries (ZIPs, images, DOCX)
+    often carry those sequences — the fix skips ambiguous parts.
+    """
+    pdf = PDFScanner(text_override=lambda _b: "should not run")
+    agg = MultiModalScanner(pdf=pdf)
+
+    # Bytes that trivially contain PDF action markers but carry
+    # no mime_type / media_type. Prior bug: scanned as PDF,
+    # produced a 0.55 score and "pdf_javascript" evidence.
+    part = {
+        "type": "file",
+        "file": {
+            "data": base64.b64encode(
+                b"garbage /JS /OpenAction /Launch more garbage"
+            ).decode("ascii"),
+        },
+    }
+    assert agg.scan_part(part) is None
+
+
 # ── Factory ────────────────────────────────────────────────────────────────────
 
 
