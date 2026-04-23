@@ -50,6 +50,49 @@ def test_detects_anthropic_raw(report: DiscoveryReport) -> None:
     assert any("anthropic_raw.py" in s for s in hits), hits
 
 
+def test_create_method_not_misclassified_as_openai(
+    report: DiscoveryReport,
+) -> None:
+    """Regression: ``client.messages.create(...)`` must not be picked up
+    as an ``openai`` call site.
+
+    Earlier drafts of the pattern table included
+    ``openai.ChatCompletion.create`` and ``anthropic.messages.create``
+    as three-segment patterns. Combined with leaf-matching that made
+    every ``.create(...)`` call in user code match as OpenAI — a false
+    positive that would poison coverage numbers. Lock the fix in.
+    """
+    openai_hits = _sites_for(report, "openai")
+    assert not any(
+        "anthropic_raw.py" in s for s in openai_hits
+    ), f"anthropic_raw.py must not appear under openai: {openai_hits!r}"
+
+    # And the method call itself must not exist as a hit under *any*
+    # framework — we detect the ``Anthropic()`` constructor on line 4
+    # and that is the only call site we should report.
+    anthropic_file_hits = [
+        c for c in report.call_sites if "anthropic_raw.py" in c.file
+    ]
+    assert len(anthropic_file_hits) == 1
+    assert anthropic_file_hits[0].symbol == "Anthropic"
+    assert anthropic_file_hits[0].line == 4
+
+
+def test_generic_create_call_is_not_matched(tmp_path: Path) -> None:
+    """Regression: an unrelated ``.create(...)`` call in user code must
+    not surface as an LLM call site."""
+    (tmp_path / "unrelated.py").write_text(
+        "class Factory:\n"
+        "    def create(self): return 1\n"
+        "\n"
+        "f = Factory()\n"
+        "x = f.create()\n"
+        "y = User.objects.create(name='a')\n",
+    )
+    r = scan_repo(tmp_path)
+    assert r.call_sites == [], r.call_sites
+
+
 def test_detects_langchain(report: DiscoveryReport) -> None:
     hits = _sites_for(report, "langchain")
     # ChatOpenAI in langchain_agent.py
