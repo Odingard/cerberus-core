@@ -79,6 +79,65 @@ stack out of the box.
 - `prometheus_host` defaults to `0.0.0.0`. Change it to `127.0.0.1`
   for single-host deployments.
 
+Delta #1 — **Auto-discovery**:
+
+The first v1.4 "2026 threat surface" delta. Ships a CLI subcommand and
+library entrypoint that answers the single biggest "first 15 minutes"
+demo question Cerberus previously could not: *where are all my LLM
+call sites, and which ones are already wrapped?*
+
+#### Added
+
+- **`cerberus discover` console script** (`pyproject.toml` →
+  `[project.scripts]`). Installs as an entrypoint in every venv that
+  `pip install cerberus-ai`; no extras required.
+- **Static repo scanner** (`cerberus_ai.discover.scan_repo`). Walks the
+  tree with zero third-party runtime dependencies (stdlib `ast`,
+  `json`, `pathlib`, `os`). Detects:
+  - OpenAI / Anthropic / Google raw client instantiations.
+  - LangChain (`ChatOpenAI`, `ChatAnthropic`, `ChatGoogleGenerativeAI`)
+    and LangGraph (`StateGraph`) call sites.
+  - CrewAI (`Agent`, `Crew`) and AutoGen (`ConversableAgent`,
+    `AssistantAgent`, `UserProxyAgent`).
+  - LlamaIndex query engine / agent runner / `VectorStoreIndex`.
+  - MCP client bindings (`mcp.ClientSession`, `stdio_client`).
+  - Tool declarations (`Tool(...)`, `StructuredTool.from_function`,
+    `FunctionTool.from_defaults`, `@tool` decorator).
+  - MCP server manifests from `mcp.json`, `.cursor/mcp.json`,
+    `.vscode/mcp.json`, and Claude Desktop config paths (project and
+    optionally `$HOME`).
+- **`DiscoveryReport` schema** (`cerberus_ai.discover.schema`). Frozen
+  dataclasses with stable JSON serialisation — `call_sites`,
+  `mcp_servers`, `coverage` (`total_call_sites`, `wrapped`,
+  `unwrapped`, `coverage_pct`), `scan_id`, `generated_at`, `errors`.
+- **Wrap-coverage heuristic.** Any file that instantiates
+  `Cerberus(...)` in the same module has every detected call site in
+  that file flagged `wrapped_by_cerberus=True`. Conservative —
+  proven-runtime coverage requires wiring, but this gives security
+  teams an honest static floor.
+- **Resilience.** A single un-parseable file records an error and the
+  scan continues — one broken file never aborts the whole report.
+- **CLI flags.** `--root / -r`, `--output / -o`, `--format json|text`,
+  `--include-mcp-home`. Text mode is colour-free for CI logs.
+
+#### Tests
+
+- 18 new tests under `tests/discovery/`. Fixture tree covers the six
+  framework variants required by the v1.4 spec §2.1 acceptance
+  criterion (LangChain, LangGraph, CrewAI, AutoGen, LlamaIndex, OpenAI
+  raw) plus Anthropic raw, MCP manifest parsing, broken-syntax
+  resilience, coverage accounting, CLI wiring, and the registered
+  console script path.
+- Total Python SDK suite: 220 passing (202 v1.3 + 18 new). `ruff` and
+  `mypy --ignore-missing-imports` clean.
+
+#### Notes
+
+- The scanner is **intentionally zero-dep**. It runs inside an
+  air-gapped CI without pulling in ONNX / torch / OpenAI / Anthropic.
+- Runtime discovery (OTLP / eBPF) and the cluster scanner are
+  out-of-scope for Delta #1 — they ship in a later delta.
+
 ### Python SDK (`cerberus-ai`) — v1.3.0 spec completion
 
 The Python SDK is now at feature parity with the v1.3.0 TypeScript SDK
