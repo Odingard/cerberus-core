@@ -90,14 +90,51 @@ def test_inference_exception_fails_open_to_zero(
 def test_latency_budget_exceeded_returns_zero(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """When inference is still running past the budget, the caller
+    is released with a 0.0 score — the inspector is never stalled
+    beyond ``max_latency_ms``."""
     def slow(_t: str) -> float:
-        time.sleep(0.05)   # 50 ms >> 5 ms budget
+        time.sleep(0.20)   # 200 ms >> 5 ms budget — still running at join
         return 0.99
 
     clf = MLInjectionClassifier(predict_override=slow, max_latency_ms=5)
+    started = time.perf_counter()
     with caplog.at_level("WARNING"):
         assert clf.score("x") == 0.0
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    # Budget is the hard wall; we allow a generous safety margin for
+    # OS scheduling on busy CI runners but nothing close to the
+    # 200 ms the worker will actually spend.
+    assert elapsed_ms < 100, f"score() did not respect budget: {elapsed_ms:.1f} ms"
     assert any("latency budget" in r.message for r in caplog.records)
+
+
+def test_valid_score_under_budget_is_kept(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Regression: an inference that completes *within* the budget
+    must return its actual score. An earlier implementation checked
+    elapsed time *after* inference finished and zeroed out valid
+    detections — re-opening the gap the classifier was meant to
+    close. Lock the fix in.
+    """
+    def realistic(_t: str) -> float:
+        # Takes a non-trivial slice of the budget but completes
+        # before it expires.
+        time.sleep(0.005)
+        return 0.92
+
+    clf = MLInjectionClassifier(
+        predict_override=realistic,
+        max_latency_ms=200,
+    )
+    with caplog.at_level("WARNING"):
+        score = clf.score("whatever")
+    assert score == pytest.approx(0.92, abs=1e-6)
+    # No warning fired — the call succeeded cleanly.
+    assert not any(
+        "latency budget" in r.message for r in caplog.records
+    ), [r.message for r in caplog.records]
 
 
 def test_constructor_validates_inputs() -> None:
