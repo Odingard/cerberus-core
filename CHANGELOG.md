@@ -219,6 +219,72 @@ pattern library so detection rules stay in one place.
   `file`, Anthropic `image` with `source.{type,data}`,
   generic `document` parts.
 
+Delta #5 — **Validation harness + published baseline**: the last of
+the five v1.4 deltas. It ships
+a deterministic N ≥ 5000 adversarial corpus, a `cerberus validate` CLI,
+and a published baseline in
+`sdk/python/docs/validation/v1.4-baseline/`. Every future v1.4.x
+release is benchmarked against this corpus; the CLI can gate CI on
+F1 regression via `--fail-f1-below`.
+
+#### Added
+
+- **Deterministic built-in corpus.** `cerberus_ai.validation.corpus` —
+  N = 5100, 8 stratified categories (benign 2000; single-layer
+  L1/L2/L3 1900; pair-wise L1∧L2, L2∧L3, L1∧L3 1000; trifecta 200).
+  Seeded (`BUILTIN_SEED = 1989`); re-running the generator on any
+  machine yields bit-identical cases and identical downstream
+  metrics. Category labels encode ground-truth based on case
+  content (conservative); the runner scores against the harness's
+  realistic agent config (declared outbound-capable + data-reading
+  tools), so L1 and L3 saturate baseline-true and the decision
+  variable collapses to L2 — i.e. "did Cerberus block the turn when
+  L2 content appeared under a realistic agent?", which is the
+  product question.
+- **Corpus runner with per-case isolation.**
+  `cerberus_ai.validation.runner.run_corpus()` builds a fresh
+  `Cerberus` per case (Cerberus is a per-agent-session singleton;
+  sharing one instance across unrelated corpus cases leaks L1
+  data-flow tokens, L2 recency windows, EGI delegation graphs and
+  the L4 memory ledger, poisoning later cases into false-positive
+  trifectas). Collects latency + detection evidence per case,
+  aggregates per-layer confusion matrices (TP/FP/FN/TN,
+  precision, recall, F1, FPR) and an overall
+  `block`-decision matrix, and surfaces latency percentiles
+  (mean / p50 / p95 / p99 / max).
+- **`cerberus validate` CLI.** `python -m cerberus_ai.validation.cli
+  --corpus builtin --out <dir>` writes `report.json` +
+  `report.md` (headline + per-layer table + per-category
+  breakdown + latency). `--fail-f1-below <threshold>` exits
+  non-zero for CI gating; `--n <N>` overrides corpus size for
+  smoke runs.
+- **Published baseline report** at
+  `sdk/python/docs/validation/v1.4-baseline/{report.json,report.md,README.md}`.
+  Current numbers (deterministic, reproducible with `pip install
+  cerberus-ai` + the one-line CLI invocation):
+  - **Trifecta block recall**: 89.5%  (179 / 200 real-attack
+    turns blocked)
+  - **Block precision**: 69.1%
+  - **Block recall** (across all attack mixes): 84.8%
+  - **Block F1**: 0.761
+  - **Benign false-positive rate**: 14.2%
+  - **Latency**: mean 1.27 ms / p95 1.58 ms / max ≈ 6 ms
+    across 5100 cases, well under the v1.4 SLA.
+- **22 validation tests** (`tests/unit/test_validation.py`) covering
+  corpus determinism, stratified mixing, per-case isolation, layer
+  aggregation, CLI exit codes, the `--fail-f1-below` gate, and the
+  headline-metric contract.
+
+#### Changed
+
+- Report headline in `report.md` now leads with **block** metrics
+  (trifecta block recall, block precision, block recall, block F1,
+  benign FP rate) rather than per-layer L1/L3 numbers. Per-layer
+  L1/L3 numbers saturate under a realistic agent config (every
+  turn has baseline outbound reach + data-read capability), which
+  is accurate but not the honest summary of how the product
+  performs in the field.
+
 ### Python SDK (`cerberus-ai`) — v1.3.0 spec completion
 
 The Python SDK is now at feature parity with the v1.3.0 TypeScript SDK

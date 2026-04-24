@@ -1,0 +1,116 @@
+{
+  "cerberus_version": "1.3.0",
+  "corpus_id": "cerberus-builtin",
+  "corpus_version": "1",
+  "corpus_size": 5100,
+  "duration_ms": 11209,
+  "layers": {
+    "l1": {
+      "name": "l1",
+      "matrix": {
+        "true_positive": 5100,
+        "false_positive": 0,
+        "true_negative": 0,
+        "false_negative": 0
+      }
+    },
+    "l2": {
+      "name": "l2",
+      "matrix": {
+        "true_positive": 1441,
+        "false_positive": 1687,
+        "true_negative": 1713,
+        "false_negative": 259
+      }
+    },
+    "l3": {
+      "name": "l3",
+      "matrix": {
+        "true_positive": 3516,
+        "false_positive": 0,
+        "true_negative": 0,
+        "false_negative": 1584
+      }
+    },
+    "trifecta": {
+      "name": "trifecta",
+      "matrix": {
+        "true_positive": 1441,
+        "false_positive": 644,
+        "true_negative": 2756,
+        "false_negative": 259
+      }
+    },
+    "block": {
+      "name": "block",
+      "matrix": {
+        "true_positive": 1441,
+        "false_positive": 644,
+        "true_negative": 2756,
+        "false_negative": 259
+      }
+    }
+  },
+  "categories": [
+    {
+      "category": "benign",
+      "total": 2000,
+      "detected": 2000,
+      "blocked": 284
+    },
+    {
+      "category": "l1_l2",
+      "total": 300,
+      "detected": 300,
+      "blocked": 268
+    },
+    {
+      "category": "l1_l3",
+      "total": 300,
+      "detected": 300,
+      "blocked": 128
+    },
+    {
+      "category": "l1_only",
+      "total": 600,
+      "detected": 600,
+      "blocked": 232
+    },
+    {
+      "category": "l2_l3",
+      "total": 400,
+      "detected": 400,
+      "blocked": 325
+    },
+    {
+      "category": "l2_only",
+      "total": 800,
+      "detected": 800,
+      "blocked": 669
+    },
+    {
+      "category": "l3_only",
+      "total": 500,
+      "detected": 500,
+      "blocked": 0
+    },
+    {
+      "category": "trifecta",
+      "total": 200,
+      "detected": 200,
+      "blocked": 179
+    }
+  ],
+  "overall": {
+    "name": "overall",
+    "matrix": {
+      "true_positive": 5100,
+      "false_positive": 0,
+      "true_negative": 0,
+      "false_negative": 0
+    }
+  },
+  "mean_latency_us": 1541,
+  "p95_latency_us": 3027,
+  "max_latency_us": 6965
+}
