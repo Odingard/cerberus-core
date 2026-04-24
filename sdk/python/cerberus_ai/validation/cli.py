@@ -121,10 +121,20 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {json_path}")
     print(f"wrote {md_path}")
 
-    overall_f1 = report.overall.f1 if report.overall else 0.0
-    if args.fail_f1_below is not None and overall_f1 < args.fail_f1_below:
+    # Gate on the *block*-layer F1 (the "did Cerberus block when it should?"
+    # decision). The ``overall`` confusion matrix uses a loose "any expected /
+    # any actual" heuristic which, on the built-in corpus where every case
+    # has ``expected.l1 = True`` and L1 fires baseline-true, always scores
+    # 1.0 — so gating on ``overall`` would make ``--fail-f1-below`` a no-op.
+    # Block F1 is the product-relevant number and the one the published
+    # baseline + CHANGELOG quote.
+    block_layer = report.layers.get("block")
+    gate_f1 = block_layer.f1 if block_layer is not None else (
+        report.overall.f1 if report.overall else 0.0
+    )
+    if args.fail_f1_below is not None and gate_f1 < args.fail_f1_below:
         print(
-            f"FAIL: overall F1 {overall_f1:.3f} < threshold "
+            f"FAIL: block F1 {gate_f1:.3f} < threshold "
             f"{args.fail_f1_below:.3f}",
             file=sys.stderr,
         )
