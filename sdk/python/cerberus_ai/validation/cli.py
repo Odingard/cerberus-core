@@ -65,6 +65,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--n",
+        type=int,
+        default=None,
+        dest="max_cases",
+        help=(
+            "Cap the corpus at the first N cases after stratified "
+            "generation. Useful for CI smoke runs; not a substitute "
+            "for the full baseline."
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Emit per-case progress to stderr.",
@@ -88,6 +99,12 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     corpus = _load_corpus(args.corpus)
+    if args.max_cases is not None and args.max_cases < corpus.size:
+        corpus = ValidationCorpus(
+            corpus_id=corpus.corpus_id,
+            version=corpus.version,
+            cases=corpus.cases[: args.max_cases],
+        )
     if args.verbose:
         print(
             f"[cerberus-validate] corpus={corpus.corpus_id} "

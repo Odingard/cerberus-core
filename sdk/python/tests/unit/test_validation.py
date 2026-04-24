@@ -328,6 +328,87 @@ class TestRunner:
         report = run_corpus(corpus)
         assert report.corpus_size == 1
 
+    def test_runner_closes_per_case_cerberus_instances(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Regression guard: every per-case `Cerberus` instance owns a
+        # `ThreadPoolExecutor` via `CerberusInspector`. Relying on
+        # `__del__` leaks up to one worker thread per case on non-CPython
+        # runtimes (PyPy, GraalPy) and is fragile on CPython itself.
+        # This test asserts `close()` fires once per case when the
+        # runner builds its own instance.
+        from cerberus_ai import validation as _validation  # noqa: PLC0415
+        ctor_calls = 0
+        close_calls = 0
+        real_ctor = _validation.runner.Cerberus
+
+        class _CountingCerberus(real_ctor):  # type: ignore[misc, valid-type]
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                nonlocal ctor_calls
+                ctor_calls += 1
+                super().__init__(*args, **kwargs)
+
+            def close(self) -> None:
+                nonlocal close_calls
+                close_calls += 1
+                super().close()
+
+        monkeypatch.setattr(_validation.runner, "Cerberus", _CountingCerberus)
+
+        cases = [
+            ValidationCase(
+                case_id=f"c{i}",
+                category=CaseCategory.BENIGN,
+                description="per-case close-guard",
+                messages=[{"role": "user", "content": f"hello {i}"}],
+                expected=ExpectedDetection(l1=True, l3=True),
+            )
+            for i in range(4)
+        ]
+        corpus = ValidationCorpus(corpus_id="close", version="0", cases=cases)
+        run_corpus(corpus)
+        # One fresh constructor per case, one close() per constructor —
+        # proves every per-case instance was built *and* torn down.
+        assert ctor_calls == len(cases)
+        assert close_calls == len(cases)
+
+    def test_runner_does_not_close_shared_cerberus(self) -> None:
+        # The runner must *not* close a caller-supplied `Cerberus`;
+        # that instance's lifecycle belongs to the caller.
+        from cerberus_ai import Cerberus  # noqa: PLC0415
+        from cerberus_ai.validation.runner import (  # noqa: PLC0415
+            default_runner_cerberus_config,
+        )
+        shared = Cerberus(default_runner_cerberus_config())
+        close_calls: list[int] = []
+        original_close = shared.close
+
+        def _tracking_close() -> None:
+            close_calls.append(1)
+            original_close()
+
+        shared.close = _tracking_close  # type: ignore[method-assign]
+        try:
+            corpus = ValidationCorpus(
+                corpus_id="shared",
+                version="0",
+                cases=[
+                    ValidationCase(
+                        case_id="c0",
+                        category=CaseCategory.BENIGN,
+                        description="shared-instance",
+                        messages=[{"role": "user", "content": "hi"}],
+                        expected=ExpectedDetection(l1=True, l3=True),
+                    )
+                ],
+            )
+            run_corpus(corpus, cerberus=shared)
+            assert close_calls == [], (
+                "runner must not close a caller-supplied Cerberus"
+            )
+        finally:
+            original_close()
+
 
 # ── Report emit + render ──────────────────────────────────────────────────────
 

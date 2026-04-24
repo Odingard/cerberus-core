@@ -202,6 +202,16 @@ def run_corpus(
     for case in corpus.cases:
         per_category_total[case.category] += 1
 
+        # Per-case `Cerberus` instances must be explicitly closed — each
+        # one owns a `ThreadPoolExecutor` (via `CerberusInspector`) that
+        # `inspect()` uses for bounded timeouts. Relying on `__del__` /
+        # refcounting works on CPython but is fragile (any future ref
+        # cycle, or running under PyPy, would silently leak up to
+        # ``len(corpus.cases)`` worker threads). `close()` is
+        # idempotent, so a `try/finally` is safe even on the error path.
+        # We only close instances the runner built; a caller-supplied
+        # ``shared_cerberus`` is the caller's responsibility.
+        owns_instance = shared_cerberus is None
         if shared_cerberus is not None:
             cerberus = shared_cerberus
         elif default_cfg is not None:
@@ -209,43 +219,55 @@ def run_corpus(
         else:  # pragma: no cover — unreachable, both are None only when called wrong
             raise RuntimeError("run_corpus invariant broken: no cerberus config available")
 
-        t0 = time.perf_counter()
         try:
-            result = cerberus.inspect(
-                messages=case.messages,
-                tool_calls=case.tool_calls,
+            t0 = time.perf_counter()
+            try:
+                result = cerberus.inspect(
+                    messages=case.messages,
+                    tool_calls=case.tool_calls,
+                )
+            except Exception:  # noqa: BLE001 — per-case robustness > strict typing
+                # A detector exception on one case cannot brick a 5000-case run.
+                # Count as a miss and move on; the failure shows up as a
+                # false negative (if the case expected a detection) or an
+                # equivocal false positive.
+                per_category_hits[case.category] += 0
+                continue
+            elapsed_us = int((time.perf_counter() - t0) * 1_000_000)
+            latencies_us.append(elapsed_us)
+
+            actual_l1 = result.conditions.l1_privileged_data
+            actual_l2 = result.conditions.l2_injection
+            actual_l3 = result.conditions.l3_exfiltration_path
+            actual_trifecta = result.conditions.trifecta_active
+            actual_blocked = result.blocked
+
+            if actual_blocked:
+                per_category_blocks[case.category] += 1
+
+            hit = _score_case(
+                case,
+                actual_l1,
+                actual_l2,
+                actual_l3,
+                actual_trifecta,
+                actual_blocked,
+                layers,
+                overall_mat,
             )
-        except Exception:  # noqa: BLE001 — per-case robustness > strict typing
-            # A detector exception on one case cannot brick a 5000-case run.
-            # Count as a miss and move on; the failure shows up as a
-            # false negative (if the case expected a detection) or an
-            # equivocal false positive.
-            per_category_hits[case.category] += 0
-            continue
-        elapsed_us = int((time.perf_counter() - t0) * 1_000_000)
-        latencies_us.append(elapsed_us)
-
-        actual_l1 = result.conditions.l1_privileged_data
-        actual_l2 = result.conditions.l2_injection
-        actual_l3 = result.conditions.l3_exfiltration_path
-        actual_trifecta = result.conditions.trifecta_active
-        actual_blocked = result.blocked
-
-        if actual_blocked:
-            per_category_blocks[case.category] += 1
-
-        hit = _score_case(
-            case,
-            actual_l1,
-            actual_l2,
-            actual_l3,
-            actual_trifecta,
-            actual_blocked,
-            layers,
-            overall_mat,
-        )
-        if hit:
-            per_category_hits[case.category] += 1
+            if hit:
+                per_category_hits[case.category] += 1
+        finally:
+            if owns_instance:
+                # `close()` tears down the inspector's ThreadPoolExecutor.
+                # Tolerate a missing `close()` so older `Cerberus` builds
+                # in downstream integration tests don't break the harness.
+                close = getattr(cerberus, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:  # noqa: BLE001, S110 — cleanup failure must not abort a 5000-case run
+                        pass
 
     total_ms = int((time.perf_counter() - started) * 1_000)
 
