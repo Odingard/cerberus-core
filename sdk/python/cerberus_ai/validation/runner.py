@@ -228,10 +228,23 @@ def run_corpus(
                 )
             except Exception:  # noqa: BLE001 — per-case robustness > strict typing
                 # A detector exception on one case cannot brick a 5000-case run.
-                # Count as a miss and move on; the failure shows up as a
-                # false negative (if the case expected a detection) or an
-                # equivocal false positive.
-                per_category_hits[case.category] += 0
+                # Score as if every detector returned False: an expected
+                # detection becomes a false negative, a benign case stays a
+                # true negative. This keeps every confusion matrix's `total`
+                # exactly equal to ``corpus.size`` so metrics are computed
+                # against the right denominator.
+                hit = _score_case(
+                    case,
+                    actual_l1=False,
+                    actual_l2=False,
+                    actual_l3=False,
+                    actual_trifecta=False,
+                    actual_blocked=False,
+                    layers=layers,
+                    overall_mat=overall_mat,
+                )
+                if hit:
+                    per_category_hits[case.category] += 1
                 continue
             elapsed_us = int((time.perf_counter() - t0) * 1_000_000)
             latencies_us.append(elapsed_us)
@@ -247,13 +260,13 @@ def run_corpus(
 
             hit = _score_case(
                 case,
-                actual_l1,
-                actual_l2,
-                actual_l3,
-                actual_trifecta,
-                actual_blocked,
-                layers,
-                overall_mat,
+                actual_l1=actual_l1,
+                actual_l2=actual_l2,
+                actual_l3=actual_l3,
+                actual_trifecta=actual_trifecta,
+                actual_blocked=actual_blocked,
+                layers=layers,
+                overall_mat=overall_mat,
             )
             if hit:
                 per_category_hits[case.category] += 1
