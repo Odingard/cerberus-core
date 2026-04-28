@@ -91,6 +91,15 @@ _CALL_PATTERNS: tuple[tuple[str, Framework, str | None], ...] = (
     ("mcp.ClientSession", "mcp-client", None),
 )
 
+# Leaves that are too generic to be matched leaf-only without false
+# positives (e.g. ``aiohttp.ClientSession`` would otherwise be tagged
+# as ``mcp-client``). For these names the matcher requires the dotted
+# call target to actually contain the framework module — exact match
+# (``mcp.ClientSession``), namespaced match (``mcp.client.ClientSession``),
+# or a bare ``ClientSession`` name only when the source file imports it
+# from the ``mcp`` package.
+_GENERIC_LEAVES: frozenset[str] = frozenset({"ClientSession"})
+
 # Recognised tool-declaration patterns — call sites that appear near
 # these are marked with their tool set.
 _TOOL_DECL_PATTERNS: tuple[str, ...] = (
@@ -135,7 +144,10 @@ def _dotted_name(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
-def _match_pattern(dotted: str) -> tuple[Framework, str | None] | None:
+def _match_pattern(
+    dotted: str,
+    imported_modules: frozenset[str] = frozenset(),
+) -> tuple[Framework, str | None] | None:
     """Return ``(framework, model_family)`` for a dotted call target,
     or ``None`` if nothing matches.
 
@@ -153,22 +165,41 @@ def _match_pattern(dotted: str) -> tuple[Framework, str | None] | None:
     a pattern with a generic leaf like ``.create`` or ``.from_documents``
     would cause spurious matches on unrelated code — the loader asserts
     the two-segment invariant so we can't regress silently.
+
+    For leaves listed in :data:`_GENERIC_LEAVES` (e.g. ``ClientSession``,
+    which ``aiohttp`` and ``httpx`` also expose), bare-name and trailing
+    matches are gated on ``imported_modules`` actually containing the
+    pattern's module. Without that gate, ``aiohttp.ClientSession(...)``
+    would be misclassified as ``mcp-client``.
     """
     for pattern, framework, family in _CALL_PATTERNS:
         if dotted == pattern:
             return framework, family
         # Invariant enforced at module load (see _assert_pattern_shape).
-        leaf = pattern.rsplit(".", 1)[-1]
-        if (
+        module, leaf = pattern.split(".", 1)
+        candidate = (
             dotted == leaf
             or dotted.endswith("." + leaf)
             or dotted.startswith(leaf + ".")
-        ):
-            # ``X.y(...)`` — classmethod / alternate-constructor style
-            # (e.g. ``VectorStoreIndex.from_documents(...)``) is routed
-            # back to the class's framework. Safe because every leaf is
-            # a specific framework class name, not a generic verb.
-            return framework, family
+        )
+        if not candidate:
+            continue
+        if leaf in _GENERIC_LEAVES:
+            # Generic leaf: require the dotted path to actually be in
+            # the framework module, or the source file to have imported
+            # the module. Otherwise this is an unrelated library that
+            # happens to share the class name (aiohttp.ClientSession).
+            in_module = (
+                dotted.startswith(module + ".")
+                or ("." + module + ".") in "." + dotted + "."
+            )
+            if not (in_module or module in imported_modules):
+                continue
+        # ``X.y(...)`` — classmethod / alternate-constructor style
+        # (e.g. ``VectorStoreIndex.from_documents(...)``) is routed
+        # back to the class's framework. Safe because every leaf is
+        # a specific framework class name, not a generic verb.
+        return framework, family
     return None
 
 
@@ -243,6 +274,19 @@ def _scan_python_file(path: Path, root: Path) -> tuple[list[CallSite], list[str]
         errors.append(f"parse {path}: {e}")
         return [], errors
 
+    # Pass 0: collect top-level module names imported by this file so
+    # generic-leaf patterns (see :data:`_GENERIC_LEAVES`) only match
+    # when the corresponding framework was actually imported.
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                imported.add(node.module.split(".", 1)[0])
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imported.add(alias.name.split(".", 1)[0])
+    imported_modules = frozenset(imported)
+
     # Pass 1: decide if the file instantiates Cerberus.
     wrapped_file = False
     for node in ast.walk(tree):
@@ -271,7 +315,7 @@ def _scan_python_file(path: Path, root: Path) -> tuple[list[CallSite], list[str]
         dotted = _dotted_name(node.func)
         if not dotted:
             continue
-        hit = _match_pattern(dotted)
+        hit = _match_pattern(dotted, imported_modules=imported_modules)
         if hit is None:
             continue
         framework, family = hit
