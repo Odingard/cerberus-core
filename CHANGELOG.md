@@ -32,6 +32,16 @@ stack out of the box.
   `CerberusBlockRateHigh`, `CerberusRiskScoreElevated`,
   `CerberusHighCallVolume`, `CerberusMetricsMissing`. Evaluated every
   30 s; runbook hints attached.
+- **`EventType.INSPECTION_COMPLETE`.** Synthetic terminal event emitted
+  exactly once at the end of every `inspect()` / `_inspect_core` call —
+  blocked or clean — carrying the canonical per-inspection payload
+  (`tool_name`, `action`, `blocked`, `risk_score`,
+  `inspection_duration_ms`, `severity`). It is appended to
+  `InspectionResult.events` and emitted to `Observe` so any listener
+  has a reliable one-event-per-inspection signal regardless of how
+  many `PARTIAL_*` / `LETHAL_TRIFECTA` / manifest events fired during
+  detection. Severity is `INFO`; this is bookkeeping, not a security
+  signal.
 - **`cerberus_ai.telemetry.prometheus.PrometheusExporter`** — a
   background `/metrics` server that attaches as an in-process listener
   to `ObserveEmitter` and exposes:

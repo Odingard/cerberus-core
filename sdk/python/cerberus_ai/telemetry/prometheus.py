@@ -48,14 +48,18 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = logging.getLogger("cerberus.prometheus")
 
-_BLOCK_EVENT_TYPES: set[str] = {
-    EventType.LETHAL_TRIFECTA.value,
-    EventType.MANIFEST_SIGNATURE_INVALID.value,
-    EventType.CROSS_AGENT_TRIFECTA.value,
-    EventType.INSPECTION_TIMEOUT.value,
-    EventType.TURN_SIZE_EXCEEDED.value,
-    EventType.UNAUTHORIZED_AGENT_SPAWN.value,
-}
+# Per-inspection metrics (``cerberus_tool_calls_total``,
+# ``cerberus_tool_calls_blocked_total``, ``cerberus_risk_score``,
+# ``cerberus_inspection_duration_ms``) are incremented exclusively when
+# an :class:`EventType.INSPECTION_COMPLETE` event arrives. Every other
+# event type still feeds ``cerberus_events_total`` and any specific
+# block-category counter (manifest, cross-agent), but does **not**
+# touch the per-inspection counters — a single blocked turn emits
+# multiple ``PARTIAL_*`` / ``LETHAL_TRIFECTA`` events, and counting them
+# all would over-count traffic and skew the block rate. Conversely, a
+# clean turn emits zero detection events; only the synthetic terminal
+# event guarantees one increment per inspection.
+_INSPECTION_TERMINAL_EVENT: str = EventType.INSPECTION_COMPLETE.value
 
 # Risk-score histogram buckets — matches the [0, 1, 2, 3, 4] score range
 # used by the correlation engine. Dashboards query `le="3"` for the
@@ -242,45 +246,41 @@ class PrometheusExporter:
             event.severity
         )
 
+        # Every event — detection signal *or* terminal bookkeeping —
+        # contributes to the per-type events counter. Dashboards drive
+        # the "Detections by Tier" / "Events by Type" panels off this.
         self._events_total.labels(event_type=event_type, severity=severity).inc()
 
         payload = event.payload or {}
         tool_name = _coerce_label(payload.get("tool_name")) or "unknown"
         action = _coerce_label(payload.get("action")) or "inspect"
 
-        # Every event represents "we inspected something" — count it.
-        # Exception: pure startup / telemetry-gap / config advisory events
-        # are NOT inspections. Skip them so the call-rate panel is clean.
-        if event_type not in _STARTUP_EVENT_TYPES:
-            self._tool_calls.labels(tool_name, action).inc()
-
-        if event.blocked or event_type in _BLOCK_EVENT_TYPES:
-            self._tool_calls_blocked.labels(tool_name, action).inc()
-
-        # Risk score — correlation engine attaches it to the TRIFECTA_*
-        # and post-inspection events. Ignore if absent.
-        risk = payload.get("risk_score")
-        if isinstance(risk, int | float):
-            self._risk_score.observe(float(risk))
-
-        # Inspection duration — Sprint 7 self-hardening attaches this to
-        # every post-inspection event.
-        duration = payload.get("inspection_duration_ms")
-        if isinstance(duration, int | float):
-            self._inspection_duration_ms.observe(float(duration))
-
-        # Specific hard-BLOCK categories.
+        # Specific hard-BLOCK category counters fire on the underlying
+        # detection event — one per occurrence, independent of the
+        # per-inspection counters.
         if event_type == EventType.MANIFEST_SIGNATURE_INVALID.value:
             self._manifest_failures.inc()
         if event_type == EventType.CROSS_AGENT_TRIFECTA.value:
             self._cross_agent_trifecta.inc()
 
+        # Per-inspection metrics: increment exactly once, on the
+        # synthetic INSPECTION_COMPLETE terminal event. See the module
+        # docstring on ``_INSPECTION_TERMINAL_EVENT`` for why this is
+        # the only correct attachment point.
+        if event_type != _INSPECTION_TERMINAL_EVENT:
+            return
 
-_STARTUP_EVENT_TYPES: set[str] = {
-    EventType.PASSTHROUGH_MODE_ACTIVE.value,
-    EventType.PARTIAL_SCAN_MODE_ACTIVE.value,
-    EventType.TELEMETRY_GAP.value,
-}
+        self._tool_calls.labels(tool_name, action).inc()
+        if event.blocked or payload.get("blocked") is True:
+            self._tool_calls_blocked.labels(tool_name, action).inc()
+
+        risk = payload.get("risk_score")
+        if isinstance(risk, int | float):
+            self._risk_score.observe(float(risk))
+
+        duration = payload.get("inspection_duration_ms")
+        if isinstance(duration, int | float):
+            self._inspection_duration_ms.observe(float(duration))
 
 
 def _coerce_label(value: Any) -> str | None:
