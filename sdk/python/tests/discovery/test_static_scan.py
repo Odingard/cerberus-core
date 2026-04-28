@@ -78,6 +78,43 @@ def test_create_method_not_misclassified_as_openai(
     assert anthropic_file_hits[0].line == 4
 
 
+def test_aiohttp_clientsession_not_misclassified_as_mcp(tmp_path: Path) -> None:
+    """Regression: ``aiohttp.ClientSession(...)`` must not be reported as
+    an MCP-client call site.
+
+    The pattern ``mcp.ClientSession`` would otherwise leaf-match every
+    ``X.ClientSession(...)`` call in user code (``aiohttp.ClientSession``,
+    ``httpx.ClientSession``, ...) and pollute coverage numbers with
+    bogus mcp-client hits. The matcher gates generic leaves on the
+    file's actual import set.
+    """
+    (tmp_path / "uses_aiohttp.py").write_text(
+        "import aiohttp\n"
+        "\n"
+        "async def fetch(url):\n"
+        "    async with aiohttp.ClientSession() as s:\n"
+        "        return await s.get(url)\n"
+    )
+    (tmp_path / "uses_aiohttp_bare.py").write_text(
+        "from aiohttp import ClientSession\n"
+        "\n"
+        "async def fetch(url):\n"
+        "    async with ClientSession() as s:\n"
+        "        return await s.get(url)\n"
+    )
+    (tmp_path / "uses_mcp.py").write_text(
+        "from mcp import ClientSession\n"
+        "\n"
+        "async def use(transport):\n"
+        "    async with ClientSession(transport, transport) as session:\n"
+        "        await session.initialize()\n"
+    )
+    r = scan_repo(tmp_path)
+    mcp_files = sorted(c.file for c in r.call_sites if c.framework == "mcp-client")
+    assert all("aiohttp" not in f for f in mcp_files), mcp_files
+    assert any("uses_mcp.py" in f for f in mcp_files), mcp_files
+
+
 def test_generic_create_call_is_not_matched(tmp_path: Path) -> None:
     """Regression: an unrelated ``.create(...)`` call in user code must
     not surface as an LLM call site."""
