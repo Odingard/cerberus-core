@@ -44,8 +44,10 @@ that actually matter to a buyer:
 The default runner config (`default_runner_cerberus_config`)
 intentionally declares:
 
-* ten tools (four outbound-capable, six data-reading /
-  benign helpers), and
+* ten tools (six outbound-capable — `http_post`, `send_email`,
+  `webhook`, `notify_slack`, `upload_to_s3`, `dns_lookup`; and
+  four data-reading / benign helpers — `get_calendar`,
+  `search_docs`, `run_sql`, `translate`), and
 * **no explicit data sources**.
 
 That is the shape of a realistic production agent — the agent
