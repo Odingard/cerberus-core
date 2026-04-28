@@ -74,6 +74,17 @@ from cerberus_ai.telemetry.observe import ObserveEmitter
 logger = logging.getLogger("cerberus.inspector")
 
 
+def _completed_future(result: InspectionResult) -> concurrent.futures.Future[InspectionResult]:
+    """Return a Future already resolved with ``result``.
+
+    Used by ``inspect_async_nonblocking`` when a pre-flight check (size
+    limit, manifest gate) blocks the turn before any worker submission.
+    """
+    fut: concurrent.futures.Future[InspectionResult] = concurrent.futures.Future()
+    fut.set_result(result)
+    return fut
+
+
 class CerberusInspector:
     """
     Core inspection engine for a single Cerberus session.
@@ -832,9 +843,30 @@ class CerberusInspector:
         variant when the agent wants to keep generating tokens while
         inspection runs on a worker thread — the verdict is still
         required before any outbound tool call is dispatched.
+
+        Pre-flight checks (size limit + manifest gate) run synchronously
+        on the caller; only ``_inspect_core`` is submitted to the worker
+        executor. This avoids self-deadlock on the single-worker pool
+        that backs ``inspection_timeout_ms``.
         """
+        start_us = time.perf_counter_ns() // 1000
+        turn_id = str(uuid.uuid4())
+
+        size_block = self._check_size_limit(messages, tool_calls, turn_id, start_us)
+        if size_block is not None:
+            return InspectionHandle(_completed_future(size_block))
+
+        manifest_block = self._check_manifest_gate(turn_id, start_us)
+        if manifest_block is not None:
+            return InspectionHandle(_completed_future(manifest_block))
+
         future = self._exec.submit(
-            self.inspect, messages, tool_calls, partial_signal_callback
+            self._inspect_core,
+            messages,
+            tool_calls,
+            partial_signal_callback,
+            turn_id,
+            start_us,
         )
         return InspectionHandle(future)
 
@@ -883,11 +915,16 @@ class CerberusInspector:
         return signal
 
     def close(self) -> None:
-        """Shut down the per-inspector worker thread + flush Observe."""
+        """Shut down the per-inspector worker thread + flush Observe + close ledger."""
         try:
             self._exec.shutdown(wait=False, cancel_futures=True)
         except Exception as e:  # noqa: BLE001
             logger.debug("Inspector executor shutdown failed: %s", e)
+        if self._ledger is not None:
+            try:
+                self._ledger.close()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("Inspector ledger close failed: %s", e)
         try:
             self._observe.close()
         except Exception as e:  # noqa: BLE001

@@ -313,3 +313,25 @@ def test_inspect_async_nonblocking_zero_timeout_raises() -> None:
         pass
     handle.result(timeout=5.0)
     c.close()
+
+
+def test_inspect_async_nonblocking_safe_input_does_not_block() -> None:
+    """Regression: nonblocking inspection on safe input must not return BLOCKED.
+
+    The async-nonblocking path historically self-deadlocked on the
+    single-worker executor when ``inspection_timeout_ms > 0`` — it
+    submitted ``inspect`` (which itself submitted ``_inspect_core``) to
+    the same pool, so the inner submission queued forever and every
+    call returned a spurious ``INSPECTION_TIMEOUT`` block. The fix
+    runs pre-flight checks inline and submits ``_inspect_core``
+    directly, breaking the nesting.
+    """
+    c = Cerberus(CerberusConfig(inspection_timeout_ms=500))
+    handle = c.inspect_async_nonblocking(
+        messages=[{"role": "user", "content": "what's the weather like today?"}]
+    )
+    result = handle.result(timeout=5.0)
+    assert not result.blocked, (
+        f"safe input must not be blocked; got {result.events!r}"
+    )
+    c.close()
