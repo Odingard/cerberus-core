@@ -72,6 +72,15 @@ class EventType(str, Enum):
     TELEMETRY_GAP = "TELEMETRY_SUPPRESSION_DETECTED"
     INSPECTION_TIMEOUT = "INSPECTION_TIMEOUT_EXCEEDED"
     TURN_SIZE_EXCEEDED = "TURN_SIZE_LIMIT_EXCEEDED"
+    # Synthetic terminal event: emitted exactly once at the end of every
+    # inspection, blocked or not. Carries the canonical per-inspection
+    # metrics (risk_score, inspection_duration_ms, tool_name, action,
+    # blocked) so the Prometheus exporter can count one tool-call per
+    # inspection — without it, the exporter would either over-count
+    # (multiple PARTIAL_* events fire per blocked turn) or miss clean
+    # turns entirely (no detection events fire). Severity is INFO; this
+    # event is bookkeeping, not a security signal.
+    INSPECTION_COMPLETE = "INSPECTION_COMPLETE"
 
 
 class OverflowAction(str, Enum):

@@ -73,7 +73,14 @@ def test_exporter_registers_listener_without_serving(tmp_path) -> None:
     assert exp._on_event in observe._listeners  # type: ignore[attr-defined]
 
 
-def test_tool_calls_counter_increments_on_event(tmp_path) -> None:
+def test_tool_calls_counter_increments_on_inspection_complete(tmp_path) -> None:
+    """Per-inspection counters fire exclusively on INSPECTION_COMPLETE.
+
+    Counting per-event would over-count blocked turns (multiple
+    PARTIAL_* events per inspection) and miss clean turns (no events
+    fire on benign traffic). The synthetic terminal event guarantees
+    one increment per inspection regardless of detection outcome.
+    """
     observe = _emitter(tmp_path)
     reg = CollectorRegistry()
     PrometheusExporter(
@@ -81,22 +88,111 @@ def test_tool_calls_counter_increments_on_event(tmp_path) -> None:
     )
 
     observe.emit(SecurityEvent(
-        event_type=EventType.LETHAL_TRIFECTA,
-        severity=Severity.CRITICAL,
+        event_type=EventType.INSPECTION_COMPLETE,
+        severity=Severity.INFO,
         turn_id="t1",
         session_id="s1",
         blocked=True,
-        payload={"tool_name": "send_email", "action": "interrupt", "risk_score": 3},
+        payload={
+            "tool_name": "send_email",
+            "action": "BLOCK",
+            "blocked": True,
+            "risk_score": 3,
+        },
     ))
 
     total = _metric_sample(reg, "cerberus_tool_calls_total",
                             {"cerberus_tool_name": "send_email",
-                             "cerberus_action": "interrupt"})
+                             "cerberus_action": "BLOCK"})
     blocked = _metric_sample(reg, "cerberus_tool_calls_blocked_total",
                               {"cerberus_tool_name": "send_email",
-                               "cerberus_action": "interrupt"})
+                               "cerberus_action": "BLOCK"})
     assert total == 1.0
     assert blocked == 1.0
+
+
+def test_detection_events_do_not_increment_tool_calls(tmp_path) -> None:
+    """PARTIAL_*, LETHAL_TRIFECTA, and other security events feed only
+    ``cerberus_events_total`` — they must not touch the per-inspection
+    counters, otherwise blocked turns double- / triple-count.
+    """
+    observe = _emitter(tmp_path)
+    reg = CollectorRegistry()
+    PrometheusExporter(
+        observe=observe, port=_free_port(), registry=reg, start_http=False
+    )
+
+    for et in (
+        EventType.PARTIAL_L1,
+        EventType.PARTIAL_L2,
+        EventType.PARTIAL_L3,
+        EventType.LETHAL_TRIFECTA,
+    ):
+        observe.emit(SecurityEvent(
+            event_type=et,
+            severity=Severity.CRITICAL,
+            turn_id="t1",
+            session_id="s1",
+            blocked=(et == EventType.LETHAL_TRIFECTA),
+            payload={"tool_name": "send_email", "action": "BLOCK"},
+        ))
+
+    # 4 detection events landed on cerberus_events_total…
+    detection_events = sum(
+        _metric_sample(reg, "cerberus_events_total",
+                       {"event_type": et.value, "severity": "CRITICAL"})
+        for et in (
+            EventType.PARTIAL_L1, EventType.PARTIAL_L2,
+            EventType.PARTIAL_L3, EventType.LETHAL_TRIFECTA,
+        )
+    )
+    assert detection_events == 4.0
+
+    # … but the per-inspection tool-call counters stay at zero until an
+    # INSPECTION_COMPLETE arrives.
+    assert _metric_sample(
+        reg, "cerberus_tool_calls_total",
+        {"cerberus_tool_name": "send_email", "cerberus_action": "BLOCK"},
+    ) == 0.0
+    assert _metric_sample(
+        reg, "cerberus_tool_calls_blocked_total",
+        {"cerberus_tool_name": "send_email", "cerberus_action": "BLOCK"},
+    ) == 0.0
+
+
+def test_clean_inspection_still_increments_tool_calls(tmp_path) -> None:
+    """A benign turn fires zero detection events but must still bump
+    ``cerberus_tool_calls_total`` — otherwise the dashboard reports
+    all-clean traffic as "no traffic" and the alert rules misfire.
+    """
+    observe = _emitter(tmp_path)
+    reg = CollectorRegistry()
+    PrometheusExporter(
+        observe=observe, port=_free_port(), registry=reg, start_http=False
+    )
+
+    observe.emit(SecurityEvent(
+        event_type=EventType.INSPECTION_COMPLETE,
+        severity=Severity.INFO,
+        turn_id="clean",
+        session_id="s1",
+        blocked=False,
+        payload={
+            "tool_name": "search_docs",
+            "action": "ALLOW",
+            "blocked": False,
+            "risk_score": 0,
+        },
+    ))
+
+    assert _metric_sample(
+        reg, "cerberus_tool_calls_total",
+        {"cerberus_tool_name": "search_docs", "cerberus_action": "ALLOW"},
+    ) == 1.0
+    assert _metric_sample(
+        reg, "cerberus_tool_calls_blocked_total",
+        {"cerberus_tool_name": "search_docs", "cerberus_action": "ALLOW"},
+    ) == 0.0
 
 
 def test_risk_score_histogram_records(tmp_path) -> None:
@@ -108,11 +204,14 @@ def test_risk_score_histogram_records(tmp_path) -> None:
 
     for score in (0, 1, 2, 3):
         observe.emit(SecurityEvent(
-            event_type=EventType.LETHAL_TRIFECTA,
-            severity=Severity.HIGH,
+            event_type=EventType.INSPECTION_COMPLETE,
+            severity=Severity.INFO,
             turn_id=f"t{score}",
             session_id="s1",
-            payload={"risk_score": score, "tool_name": "x", "action": "log"},
+            payload={
+                "risk_score": score, "tool_name": "x",
+                "action": "ALLOW", "blocked": False,
+            },
         ))
 
     # count == 4 inspections
@@ -131,11 +230,14 @@ def test_inspection_duration_histogram_records(tmp_path) -> None:
     )
 
     observe.emit(SecurityEvent(
-        event_type=EventType.LETHAL_TRIFECTA,
-        severity=Severity.HIGH,
+        event_type=EventType.INSPECTION_COMPLETE,
+        severity=Severity.INFO,
         turn_id="t",
         session_id="s",
-        payload={"inspection_duration_ms": 42.5, "tool_name": "x", "action": "log"},
+        payload={
+            "inspection_duration_ms": 42.5, "tool_name": "x",
+            "action": "ALLOW", "blocked": False,
+        },
     ))
     count = _metric_sample(reg, "cerberus_inspection_duration_ms_count")
     total = _metric_sample(reg, "cerberus_inspection_duration_ms_sum")
@@ -216,7 +318,8 @@ def test_startup_advisory_events_do_not_count_as_calls(tmp_path) -> None:
 
     # Advisory events register under cerberus_events_total, but never
     # under the tool-call counters — the dashboard's call-rate panels
-    # must stay clean on startup.
+    # must stay clean on startup. (Now enforced unconditionally: only
+    # INSPECTION_COMPLETE drives the tool-call counters.)
     events = _metric_sample(
         reg, "cerberus_events_total",
         {"event_type": "TELEMETRY_SUPPRESSION_DETECTED"},
@@ -279,13 +382,15 @@ def test_default_metric_names_match_dashboard(tmp_path) -> None:
 
     # Seed one of each so the sample list is non-empty.
     observe.emit(SecurityEvent(
-        event_type=EventType.LETHAL_TRIFECTA,
-        severity=Severity.CRITICAL,
+        event_type=EventType.INSPECTION_COMPLETE,
+        severity=Severity.INFO,
         turn_id="t",
         session_id="s",
         blocked=True,
-        payload={"tool_name": "x", "action": "interrupt",
-                 "risk_score": 3, "inspection_duration_ms": 12.0},
+        payload={
+            "tool_name": "x", "action": "BLOCK", "blocked": True,
+            "risk_score": 3, "inspection_duration_ms": 12.0,
+        },
     ))
 
     names = {

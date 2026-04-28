@@ -230,6 +230,72 @@ class CerberusInspector:
         event.sequence_number = self._sequence_number
         self._observe.emit(event)
 
+    def _emit_inspection_complete(
+        self,
+        result: InspectionResult,
+        tool_calls: list[dict[str, Any]] | None,
+    ) -> InspectionResult:
+        """Emit the synthetic terminal event for this inspection.
+
+        Carries the canonical per-inspection signal (``risk_score``,
+        ``inspection_duration_ms``, ``tool_name``, ``action``,
+        ``blocked``) so the Prometheus exporter — and any other Observe
+        listener — can count exactly one tool-call per inspection,
+        regardless of how many ``PARTIAL_*`` / ``LETHAL_TRIFECTA`` /
+        manifest events fired during detection. Without this terminal
+        event the exporter would over-count blocked turns (multiple
+        partial events per turn) and miss clean turns entirely (no
+        detection events fire on a benign turn).
+
+        The event is also appended to ``result.events`` so the
+        inspection's full event sequence is visible to callers that
+        consume the returned :class:`InspectionResult` directly. It is
+        emitted before the result is returned, but never *replaces* a
+        detection event — security signals (PARTIAL_L1/L2/L3,
+        LETHAL_TRIFECTA, MANIFEST_SIGNATURE_INVALID, etc.) still emit
+        first; INSPECTION_COMPLETE is a bookkeeping sidecar.
+        """
+        tool_name: str | None = None
+        if tool_calls:
+            first = tool_calls[0]
+            if isinstance(first, dict):
+                # OpenAI-style: {"function": {"name": ...}}.
+                fn = first.get("function")
+                if isinstance(fn, dict):
+                    name = fn.get("name")
+                    if isinstance(name, str) and name:
+                        tool_name = name
+                # Anthropic / generic: {"name": ...}.
+                if tool_name is None:
+                    name = first.get("name")
+                    if isinstance(name, str) and name:
+                        tool_name = name
+        action = "BLOCK" if result.blocked else "ALLOW"
+        # Risk score is the count of active Lethal-Trifecta conditions
+        # (L1 + L2 + L3), 0–3. The Prometheus histogram buckets to
+        # ``(0, 1, 2, 3, 4)`` so ``le="3"`` cleanly matches the
+        # full-Trifecta band.
+        risk_score = result.conditions.active_count
+        duration_ms = result.inspection_latency_us / 1000.0
+        event = SecurityEvent(
+            event_type=EventType.INSPECTION_COMPLETE,
+            severity=Severity.INFO,
+            turn_id=result.turn_id,
+            session_id=result.session_id,
+            payload={
+                "tool_name": tool_name or "unknown",
+                "action": action,
+                "blocked": result.blocked,
+                "risk_score": risk_score,
+                "inspection_duration_ms": duration_ms,
+                "severity": result.severity.value,
+            },
+            blocked=result.blocked,
+        )
+        result.events.append(event)
+        self._emit(event)
+        return result
+
     # ── Multi-agent binding ───────────────────────────────────────────────
 
     def bind_delegation_graph(
@@ -281,7 +347,9 @@ class CerberusInspector:
             return size_block
 
         # ── Pre-flight: per-turn manifest gate (v1.3.0 TS parity) ───────────
-        manifest_block = self._check_manifest_gate(turn_id, start_us)
+        manifest_block = self._check_manifest_gate(
+            turn_id, start_us, tool_calls
+        )
         if manifest_block is not None:
             return manifest_block
 
@@ -309,13 +377,16 @@ class CerberusInspector:
                     blocked=True,
                 )
                 self._emit(event)
-                return InspectionResult(
-                    turn_id=turn_id,
-                    session_id=self._session_id,
-                    blocked=True,
-                    severity=Severity.CRITICAL,
-                    events=[event],
-                    inspection_latency_us=end_us - start_us,
+                return self._emit_inspection_complete(
+                    InspectionResult(
+                        turn_id=turn_id,
+                        session_id=self._session_id,
+                        blocked=True,
+                        severity=Severity.CRITICAL,
+                        events=[event],
+                        inspection_latency_us=end_us - start_us,
+                    ),
+                    tool_calls,
                 )
 
         return self._inspect_core(
@@ -359,17 +430,23 @@ class CerberusInspector:
             blocked=True,
         )
         self._emit(event)
-        return InspectionResult(
-            turn_id=turn_id,
-            session_id=self._session_id,
-            blocked=True,
-            severity=Severity.CRITICAL,
-            events=[event],
-            inspection_latency_us=end_us - start_us,
+        return self._emit_inspection_complete(
+            InspectionResult(
+                turn_id=turn_id,
+                session_id=self._session_id,
+                blocked=True,
+                severity=Severity.CRITICAL,
+                events=[event],
+                inspection_latency_us=end_us - start_us,
+            ),
+            tool_calls,
         )
 
     def _check_manifest_gate(
-        self, turn_id: str, start_us: int
+        self,
+        turn_id: str,
+        start_us: int,
+        tool_calls: list[dict[str, Any]] | None = None,
     ) -> InspectionResult | None:
         if not self._config.manifest_gate_enabled:
             return None
@@ -395,13 +472,16 @@ class CerberusInspector:
             blocked=True,
         )
         self._emit(event)
-        return InspectionResult(
-            turn_id=turn_id,
-            session_id=self._session_id,
-            blocked=True,
-            severity=Severity.CRITICAL,
-            events=[event],
-            inspection_latency_us=end_us - start_us,
+        return self._emit_inspection_complete(
+            InspectionResult(
+                turn_id=turn_id,
+                session_id=self._session_id,
+                blocked=True,
+                severity=Severity.CRITICAL,
+                events=[event],
+                inspection_latency_us=end_us - start_us,
+            ),
+            tool_calls,
         )
 
     # ── Core pipeline ─────────────────────────────────────────────────────
@@ -479,14 +559,17 @@ class CerberusInspector:
 
         if cw_result.blocked:
             end_us = time.perf_counter_ns() // 1000
-            return InspectionResult(
-                turn_id=turn_id,
-                session_id=self._session_id,
-                blocked=True,
-                severity=Severity.CRITICAL,
-                events=events,
-                inspection_latency_us=end_us - start_us,
-                context_overflow=True,
+            return self._emit_inspection_complete(
+                InspectionResult(
+                    turn_id=turn_id,
+                    session_id=self._session_id,
+                    blocked=True,
+                    severity=Severity.CRITICAL,
+                    events=events,
+                    inspection_latency_us=end_us - start_us,
+                    context_overflow=True,
+                ),
+                tool_calls,
             )
 
         # ── L1 Detection ──────────────────────────────────────────────────────
@@ -800,16 +883,19 @@ class CerberusInspector:
         end_us = time.perf_counter_ns() // 1000
         latency_us = end_us - start_us
 
-        return InspectionResult(
-            turn_id=turn_id,
-            session_id=self._session_id,
-            blocked=blocked,
-            conditions=conditions,
-            severity=conditions.severity,
-            events=events,
-            egi_violations=egi_violations,
-            inspection_latency_us=latency_us,
-            context_overflow=context_overflow,
+        return self._emit_inspection_complete(
+            InspectionResult(
+                turn_id=turn_id,
+                session_id=self._session_id,
+                blocked=blocked,
+                conditions=conditions,
+                severity=conditions.severity,
+                events=events,
+                egi_violations=egi_violations,
+                inspection_latency_us=latency_us,
+                context_overflow=context_overflow,
+            ),
+            tool_calls,
         )
 
     async def inspect_async(
@@ -856,7 +942,7 @@ class CerberusInspector:
         if size_block is not None:
             return InspectionHandle(_completed_future(size_block))
 
-        manifest_block = self._check_manifest_gate(turn_id, start_us)
+        manifest_block = self._check_manifest_gate(turn_id, start_us, tool_calls)
         if manifest_block is not None:
             return InspectionHandle(_completed_future(manifest_block))
 
