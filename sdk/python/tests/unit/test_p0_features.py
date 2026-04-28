@@ -335,3 +335,23 @@ def test_inspect_async_nonblocking_safe_input_does_not_block() -> None:
         f"safe input must not be blocked; got {result.events!r}"
     )
     c.close()
+
+
+def test_top_level_observe_verifier_is_concrete_class() -> None:
+    """Regression: ``from cerberus_ai import ObserveVerifier`` must
+    bind to the concrete verifier class, not the abstract ``Verifier``
+    Protocol.
+
+    Earlier the top-level package re-exported with
+    ``from .telemetry.observe import Verifier as ObserveVerifier``,
+    which aliased the Protocol — calling ``ObserveVerifier(...)``
+    raised ``TypeError`` because Protocols don't accept constructor
+    args. The fix imports the concrete class.
+    """
+    import cerberus_ai
+    from cerberus_ai.telemetry.observe import ObserveVerifier as ConcreteVerifier
+    assert cerberus_ai.ObserveVerifier is ConcreteVerifier
+    # Smoke: the public alias must be instantiable. We don't run a
+    # real signing flow here — that's covered above.
+    instance = cerberus_ai.ObserveVerifier(signing_key=b"\x00" * 32)
+    assert callable(getattr(instance, "verify", None))
