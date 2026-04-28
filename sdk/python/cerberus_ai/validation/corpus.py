@@ -485,17 +485,24 @@ def load_jsonl_corpus(path: str | Path) -> ValidationCorpus:
     version = "on-disk"
     description = ""
     cases: list[ValidationCase] = []
+    seen_payload = False
     with p.open("r", encoding="utf-8") as fh:
-        for line_no, raw in enumerate(fh):
+        for raw in fh:
             raw = raw.strip()
             if not raw:
                 continue
             obj = json.loads(raw)
-            if line_no == 0 and "case_id" not in obj:
+            if not seen_payload and "case_id" not in obj:
+                # First non-blank record without ``case_id`` is the
+                # optional manifest header. Tracking ``seen_payload``
+                # rather than the raw line index keeps this correct
+                # when the file starts with one or more blank lines.
                 corpus_id = obj.get("corpus_id", corpus_id)
                 version = obj.get("version", version)
                 description = obj.get("description", "")
+                seen_payload = True
                 continue
+            seen_payload = True
             cases.append(ValidationCase.model_validate(obj))
     return ValidationCorpus(
         corpus_id=corpus_id,

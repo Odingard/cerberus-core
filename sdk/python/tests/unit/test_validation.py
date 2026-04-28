@@ -218,6 +218,29 @@ class TestJsonlRoundTrip:
         with pytest.raises(FileNotFoundError):
             load_jsonl_corpus(tmp_path / "does-not-exist.jsonl")
 
+    def test_load_handles_leading_blank_lines(self, tmp_path: Path) -> None:
+        """Regression: a leading blank line must not push the manifest
+        header into the case-parsing path.
+
+        Earlier the loader detected the header by the raw line index
+        (``line_no == 0``); blank lines were ``continue``d before the
+        check, so a file starting with ``\\n{header...}`` would treat
+        the header object as a malformed :class:`ValidationCase` and
+        raise. The fix tracks ``seen_payload`` instead.
+        """
+        original = build_builtin_corpus(
+            mix={CaseCategory.BENIGN: 2, CaseCategory.TRIFECTA: 2}
+        )
+        jsonl_path = tmp_path / "corpus_leading_blank.jsonl"
+        dump_jsonl_corpus(original, jsonl_path)
+        body = jsonl_path.read_text(encoding="utf-8")
+        jsonl_path.write_text("\n\n" + body, encoding="utf-8")
+
+        loaded = load_jsonl_corpus(jsonl_path)
+        assert loaded.corpus_id == original.corpus_id
+        assert loaded.version == original.version
+        assert loaded.size == original.size
+
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 
