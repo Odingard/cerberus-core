@@ -70,8 +70,7 @@ from cerberus_ai.models import (
     StreamingMode,
     TrustLevel,
 )
-from cerberus_ai.telemetry.observe import ObserveEmitter
-from cerberus_ai.telemetry.observe import Verifier as ObserveVerifier
+from cerberus_ai.telemetry.observe import ObserveEmitter, ObserveVerifier
 
 
 class SecurityError(Exception):
