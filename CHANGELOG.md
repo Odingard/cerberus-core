@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### v1.4 — 2026 Threat Surface (in progress)
+## [1.4.0] - 2026-04-21
+
+### v1.4 — 2026 Threat Surface
 
 Delta #4 — **Observability parity**: port the private Grafana dashboard
 to the OSS repo and add a first-class Prometheus exporter to the
