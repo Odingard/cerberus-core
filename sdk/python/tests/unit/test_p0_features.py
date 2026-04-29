@@ -47,7 +47,7 @@ def test_version_matches_pyproject() -> None:
     )
     version = line.split("=", 1)[1].strip().strip('"')
     assert cerberus_ai.__version__ == version
-    assert cerberus_ai.__version__ == "1.3.0"
+    assert cerberus_ai.__version__ == "1.4.0"
 
 
 # ── Streaming mode advisories ──────────────────────────────────────────────────
