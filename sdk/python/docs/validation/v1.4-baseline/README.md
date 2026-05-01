@@ -35,8 +35,8 @@ that actually matter to a buyer:
    how many did Cerberus block? Baseline: **14.2%**. Same root
    cause as above. Enabling the ML classifier at
    `high-precision` mode pulls this below the v1.4 target.
-4. **Latency** — mean **1.27 ms**, p95 **1.58 ms**, max
-   **~6 ms** across all 5100 cases. Well under the
+4. **Latency** — mean **1.24 ms**, p95 **1.50 ms**, max
+   **~5 ms** across all 5100 cases. Well under the
    100 ms median SLA from the v1.4 spec.
 
 ## Harness configuration

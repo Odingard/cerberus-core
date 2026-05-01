@@ -270,7 +270,7 @@ F1 regression via `--fail-f1-below`.
   - **Block recall** (across all attack mixes): 84.8%
   - **Block F1**: 0.761
   - **Benign false-positive rate**: 14.2%
-  - **Latency**: mean 1.27 ms / p95 1.58 ms / max ≈ 6 ms
+  - **Latency**: mean 1.24 ms / p95 1.50 ms / max ≈ 5 ms
     across 5100 cases, well under the v1.4 SLA.
 - **22 validation tests** (`tests/unit/test_validation.py`) covering
   corpus determinism, stratified mixing, per-case isolation, layer
