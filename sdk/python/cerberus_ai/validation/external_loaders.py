@@ -58,6 +58,7 @@ import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from cerberus_ai.validation.corpus import load_jsonl_corpus
 from cerberus_ai.validation.schema import ValidationCorpus
@@ -101,7 +102,7 @@ def _cache_path(name: str, *, cache_dir: Path | None = None) -> Path:
 
 def _write_jsonl(
     path: Path,
-    cases: Iterable[dict],
+    cases: Iterable[dict[str, Any]],
     *,
     corpus_id: str,
     version: str,
@@ -134,9 +135,9 @@ def _write_jsonl(
 
 # ── HuggingFace optional dep ──────────────────────────────────────────────────
 
-def _require_datasets():
+def _require_datasets() -> Any:
     try:
-        from datasets import load_dataset  # type: ignore
+        from datasets import load_dataset
     except ImportError as exc:  # pragma: no cover - import-error path
         raise RuntimeError(
             "the 'datasets' package is required to load this corpus.\n"
@@ -157,9 +158,9 @@ DEEPSET_DESCRIPTION = (
 )
 
 
-def _build_deepset_cases() -> list[dict]:
+def _build_deepset_cases() -> list[dict[str, Any]]:
     load_dataset = _require_datasets()
-    cases: list[dict] = []
+    cases: list[dict[str, Any]] = []
     for split in ("train", "test"):
         ds = load_dataset(DEEPSET_HF_ID, split=split)
         for i, row in enumerate(ds):
@@ -220,10 +221,10 @@ GANDALF_DESCRIPTION = (
 )
 
 
-def _build_gandalf_cases() -> list[dict]:
+def _build_gandalf_cases() -> list[dict[str, Any]]:
     load_dataset = _require_datasets()
     ds = load_dataset(GANDALF_HF_ID, split="train")
-    cases: list[dict] = []
+    cases: list[dict[str, Any]] = []
     for i, row in enumerate(ds):
         text = row.get("text") or row.get("prompt") or ""
         if not text:
@@ -329,11 +330,11 @@ def _build_bipia_cases(
     n_attack: int,
     n_benign: int,
     cache_dir: Path,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     repo_root = _ensure_bipia_repo(cache_dir)
     bench = repo_root / "benchmark"
 
-    contexts: list[dict] = []
+    contexts: list[dict[str, Any]] = []
     with (bench / "email" / "test.jsonl").open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -355,7 +356,7 @@ def _build_bipia_cases(
     rng.shuffle(flat_attacks)
     rng.shuffle(contexts)
 
-    cases: list[dict] = []
+    cases: list[dict[str, Any]] = []
     for i in range(n_attack):
         ctx = contexts[i % len(contexts)]
         category, attack = flat_attacks[i % len(flat_attacks)]
