@@ -1,0 +1,80 @@
+{
+  "cerberus_version": "1.4.0",
+  "corpus_id": "cerberus-builtin",
+  "corpus_version": "on-disk",
+  "corpus_size": 800,
+  "duration_ms": 1834,
+  "layers": {
+    "l1": {
+      "name": "l1",
+      "matrix": {
+        "true_positive": 0,
+        "false_positive": 800,
+        "true_negative": 0,
+        "false_negative": 0
+      }
+    },
+    "l2": {
+      "name": "l2",
+      "matrix": {
+        "true_positive": 60,
+        "false_positive": 20,
+        "true_negative": 180,
+        "false_negative": 540
+      }
+    },
+    "l3": {
+      "name": "l3",
+      "matrix": {
+        "true_positive": 0,
+        "false_positive": 800,
+        "true_negative": 0,
+        "false_negative": 0
+      }
+    },
+    "trifecta": {
+      "name": "trifecta",
+      "matrix": {
+        "true_positive": 0,
+        "false_positive": 80,
+        "true_negative": 720,
+        "false_negative": 0
+      }
+    },
+    "block": {
+      "name": "block",
+      "matrix": {
+        "true_positive": 60,
+        "false_positive": 20,
+        "true_negative": 180,
+        "false_negative": 540
+      }
+    }
+  },
+  "categories": [
+    {
+      "category": "benign",
+      "total": 200,
+      "detected": 0,
+      "blocked": 20
+    },
+    {
+      "category": "l2_only",
+      "total": 600,
+      "detected": 600,
+      "blocked": 60
+    }
+  ],
+  "overall": {
+    "name": "overall",
+    "matrix": {
+      "true_positive": 600,
+      "false_positive": 200,
+      "true_negative": 0,
+      "false_negative": 0
+    }
+  },
+  "mean_latency_us": 1538,
+  "p95_latency_us": 1804,
+  "max_latency_us": 5036
+}

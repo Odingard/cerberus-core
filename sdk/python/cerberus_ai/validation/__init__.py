@@ -32,6 +32,15 @@ from cerberus_ai.validation.corpus import (
     build_builtin_corpus,
     load_jsonl_corpus,
 )
+from cerberus_ai.validation.external_loaders import (
+    EXTERNAL_LOADERS,
+    BipiaParams,
+    default_cache_dir,
+    load_bipia,
+    load_deepset,
+    load_external,
+    load_gandalf,
+)
 from cerberus_ai.validation.report import render_markdown_report, write_report
 from cerberus_ai.validation.runner import run_corpus
 from cerberus_ai.validation.schema import (
@@ -47,8 +56,10 @@ from cerberus_ai.validation.schema import (
 
 __all__ = [
     "BUILTIN_CORPUS_VERSION",
+    "BipiaParams",
     "CaseCategory",
     "ConfusionMatrix",
+    "EXTERNAL_LOADERS",
     "ExpectedDetection",
     "LayerMetrics",
     "RunnerConfig",
@@ -56,6 +67,11 @@ __all__ = [
     "ValidationCorpus",
     "ValidationReport",
     "build_builtin_corpus",
+    "default_cache_dir",
+    "load_bipia",
+    "load_deepset",
+    "load_external",
+    "load_gandalf",
     "load_jsonl_corpus",
     "render_markdown_report",
     "run_corpus",
