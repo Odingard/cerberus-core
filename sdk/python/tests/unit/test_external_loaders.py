@@ -272,6 +272,46 @@ def test_cli_load_corpus_routes_named_loaders(tmp_path, deepset_stub):
     assert corpus.size == 3
 
 
+# ── Manifest header round-trip ────────────────────────────────────────────────
+
+
+def test_deepset_stamps_corpus_id(tmp_path, deepset_stub):
+    """Every external loader must write a JSONL manifest header so the
+    corpus loaded back from disk is stamped with its own corpus_id /
+    version — not the builtin fallback. Catches the regression where
+    ``_write_jsonl`` skipped the header and every external corpus
+    loaded back as ``cerberus-builtin``.
+    """
+    corpus = load_deepset(cache_dir=tmp_path)
+    assert corpus.corpus_id == "deepset/prompt-injections"
+    assert corpus.version == "hf-train+test"
+
+    # First record on disk must be the manifest header (no case_id)
+    # and the second record must be the first case.
+    jsonl = _cache_path("deepset", cache_dir=tmp_path)
+    with jsonl.open() as fh:
+        first = json.loads(fh.readline())
+        second = json.loads(fh.readline())
+    assert "case_id" not in first
+    assert first["corpus_id"] == "deepset/prompt-injections"
+    assert "case_id" in second
+
+
+def test_gandalf_stamps_corpus_id(tmp_path, gandalf_stub):
+    corpus = load_gandalf(cache_dir=tmp_path)
+    assert corpus.corpus_id == "Lakera/gandalf_ignore_instructions"
+    assert corpus.version == "hf-train"
+
+
+def test_bipia_stamps_corpus_id_with_params(tmp_path, bipia_repo):
+    params = BipiaParams(seed=42, n_attack=4, n_benign=2)
+    corpus = load_bipia(params=params, cache_dir=tmp_path)
+    assert corpus.corpus_id == "microsoft/BIPIA"
+    # Composition knobs are baked into the version so two BIPIA
+    # corpora composed with different params can never collide.
+    assert corpus.version == "email-task,seed=42,a=4,b=2"
+
+
 def test_cli_load_corpus_rejects_unknown_path(tmp_path):
     with pytest.raises(SystemExit, match="corpus not found"):
         _load_corpus("definitely-not-a-corpus")

@@ -1,7 +1,7 @@
 {
   "cerberus_version": "1.4.0",
-  "corpus_id": "cerberus-builtin",
-  "corpus_version": "on-disk",
+  "corpus_id": "Lakera/gandalf_ignore_instructions",
+  "corpus_version": "hf-train",
   "corpus_size": 777,
   "duration_ms": 1459,
   "layers": {
@@ -68,7 +68,7 @@
       "false_negative": 0
     }
   },
-  "mean_latency_us": 1034,
-  "p95_latency_us": 1203,
-  "max_latency_us": 1512
+  "mean_latency_us": 1045,
+  "p95_latency_us": 1221,
+  "max_latency_us": 2374
 }

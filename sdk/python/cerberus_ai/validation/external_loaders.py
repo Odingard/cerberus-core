@@ -55,9 +55,9 @@ import os
 import random
 import shutil
 import subprocess
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
 
 from cerberus_ai.validation.corpus import load_jsonl_corpus
 from cerberus_ai.validation.schema import ValidationCorpus
@@ -99,10 +99,33 @@ def _cache_path(name: str, *, cache_dir: Path | None = None) -> Path:
 
 # ── JSONL writer ──────────────────────────────────────────────────────────────
 
-def _write_jsonl(path: Path, cases: Iterable[dict]) -> int:
+def _write_jsonl(
+    path: Path,
+    cases: Iterable[dict],
+    *,
+    corpus_id: str,
+    version: str,
+    description: str = "",
+) -> int:
+    """Write a corpus JSONL with the manifest header expected by
+    :func:`cerberus_ai.validation.corpus.load_jsonl_corpus`.
+
+    Without the header, the loader falls back to ``corpus_id =
+    "cerberus-builtin"`` and ``version = "on-disk"`` — which would
+    silently mis-stamp every external corpus as the builtin and make
+    downstream reports indistinguishable. The header lives on line 1
+    and carries no ``case_id`` so the loader's header sniff matches.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with path.open("w", encoding="utf-8") as fh:
+        header = {
+            "corpus_id": corpus_id,
+            "version": version,
+            "description": description,
+        }
+        fh.write(json.dumps(header, separators=(",", ":")))
+        fh.write("\n")
         for case in cases:
             fh.write(json.dumps(case, ensure_ascii=False) + "\n")
             n += 1
@@ -126,7 +149,12 @@ def _require_datasets():
 # ── DeepSet ───────────────────────────────────────────────────────────────────
 
 DEEPSET_HF_ID = "deepset/prompt-injections"
-DEEPSET_VERSION = "deepset/prompt-injections@hf-train+test"
+DEEPSET_CORPUS_ID = "deepset/prompt-injections"
+DEEPSET_VERSION = "hf-train+test"
+DEEPSET_DESCRIPTION = (
+    "deepset/prompt-injections train + test splits combined; "
+    "binary labels (1 = injection, 0 = benign)."
+)
 
 
 def _build_deepset_cases() -> list[dict]:
@@ -171,14 +199,25 @@ def load_deepset(
     path = _cache_path("deepset", cache_dir=cache_dir)
     if force or not path.exists():
         cases = _build_deepset_cases()
-        _write_jsonl(path, cases)
+        _write_jsonl(
+            path,
+            cases,
+            corpus_id=DEEPSET_CORPUS_ID,
+            version=DEEPSET_VERSION,
+            description=DEEPSET_DESCRIPTION,
+        )
     return load_jsonl_corpus(path)
 
 
 # ── Lakera Gandalf ────────────────────────────────────────────────────────────
 
 GANDALF_HF_ID = "Lakera/gandalf_ignore_instructions"
-GANDALF_VERSION = "Lakera/gandalf_ignore_instructions@hf-train"
+GANDALF_CORPUS_ID = "Lakera/gandalf_ignore_instructions"
+GANDALF_VERSION = "hf-train"
+GANDALF_DESCRIPTION = (
+    "Lakera/gandalf_ignore_instructions train split; "
+    "every entry is a successful jailbreak by construction."
+)
 
 
 def _build_gandalf_cases() -> list[dict]:
@@ -218,14 +257,35 @@ def load_gandalf(
     path = _cache_path("gandalf", cache_dir=cache_dir)
     if force or not path.exists():
         cases = _build_gandalf_cases()
-        _write_jsonl(path, cases)
+        _write_jsonl(
+            path,
+            cases,
+            corpus_id=GANDALF_CORPUS_ID,
+            version=GANDALF_VERSION,
+            description=GANDALF_DESCRIPTION,
+        )
     return load_jsonl_corpus(path)
 
 
 # ── Microsoft BIPIA ───────────────────────────────────────────────────────────
 
 BIPIA_GIT_URL = "https://github.com/microsoft/BIPIA"
-BIPIA_VERSION = "microsoft/BIPIA@email-task"
+BIPIA_CORPUS_ID = "microsoft/BIPIA"
+BIPIA_DESCRIPTION = (
+    "Microsoft BIPIA email task, composed per paper §3.2: attack "
+    "strings spliced into real email contexts; benign cases are "
+    "the same email contexts with no attack."
+)
+
+
+def _bipia_version(params: "BipiaParams") -> str:
+    """Bake the composition knobs into the version string so two
+    corpora composed with different params cannot share an identity.
+    """
+    return (
+        f"email-task,seed={params.seed},"
+        f"a={params.n_attack},b={params.n_benign}"
+    )
 
 
 def _ensure_bipia_repo(cache_dir: Path) -> Path:
@@ -385,7 +445,13 @@ def load_bipia(
             n_benign=p.n_benign,
             cache_dir=root,
         )
-        _write_jsonl(path, cases)
+        _write_jsonl(
+            path,
+            cases,
+            corpus_id=BIPIA_CORPUS_ID,
+            version=_bipia_version(p),
+            description=BIPIA_DESCRIPTION,
+        )
     return load_jsonl_corpus(path)
 
 
