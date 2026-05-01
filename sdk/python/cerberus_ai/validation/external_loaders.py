@@ -278,7 +278,7 @@ BIPIA_DESCRIPTION = (
 )
 
 
-def _bipia_version(params: "BipiaParams") -> str:
+def _bipia_version(params: BipiaParams) -> str:
     """Bake the composition knobs into the version string so two
     corpora composed with different params cannot share an identity.
     """
@@ -302,9 +302,16 @@ def _ensure_bipia_repo(cache_dir: Path) -> Path:
     if repo_root.exists():
         shutil.rmtree(repo_root)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    git_bin = shutil.which("git")
+    if git_bin is None:  # pragma: no cover - duplicate guard
+        raise RuntimeError("git not on PATH")
+    # BIPIA_GIT_URL is a hard-coded module constant pointing at
+    # microsoft/BIPIA on github.com — no user-controlled input ever
+    # reaches this argv, so the bandit warnings here are false
+    # positives.
+    subprocess.run(  # noqa: S603
         [
-            "git",
+            git_bin,
             "clone",
             "--depth",
             "1",
@@ -341,7 +348,10 @@ def _build_bipia_cases(
         for atk in items:
             flat_attacks.append((cat, atk))
 
-    rng = random.Random(seed)
+    # Deterministic non-crypto RNG: this seeds the corpus composition
+    # so the same seed always yields identical case_ids; no security
+    # property depends on the randomness.
+    rng = random.Random(seed)  # noqa: S311
     rng.shuffle(flat_attacks)
     rng.shuffle(contexts)
 
