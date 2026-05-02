@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **External corpus loaders for the validation harness.** Three named
+  loaders — `deepset` (Hugging Face `deepset/prompt-injections`),
+  `gandalf` (Hugging Face `Lakera/gandalf_ignore_instructions` train
+  split), and `bipia` (Microsoft `BIPIA` email task, composed per
+  paper §3.2) — fetch on first use, cache under
+  `~/.cache/cerberus/corpora/<name>/corpus.jsonl`, and feed the
+  existing `cerberus validate` harness unmodified.
+- **`cerberus validate --corpus deepset|gandalf|bipia`** flag
+  (alongside existing `builtin` + `<path>`). New flags
+  `--force-refetch` and `--corpus-cache <dir>` for cache control.
+- **Published v1.4.0 numbers against all three external corpora** at
+  `sdk/python/docs/validation/v1.4-corpora/` with a 4-corpus
+  comparison table (builtin / DeepSet / Gandalf / BIPIA) and
+  per-corpus `report.{json,md}`.
+
 ## [1.4.0] - 2026-04-21
 
 ### v1.4 — 2026 Threat Surface

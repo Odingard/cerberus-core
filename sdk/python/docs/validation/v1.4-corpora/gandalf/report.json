@@ -1,0 +1,74 @@
+{
+  "cerberus_version": "1.4.0",
+  "corpus_id": "Lakera/gandalf_ignore_instructions",
+  "corpus_version": "hf-train",
+  "corpus_size": 777,
+  "duration_ms": 1459,
+  "layers": {
+    "l1": {
+      "name": "l1",
+      "matrix": {
+        "true_positive": 0,
+        "false_positive": 777,
+        "true_negative": 0,
+        "false_negative": 0
+      }
+    },
+    "l2": {
+      "name": "l2",
+      "matrix": {
+        "true_positive": 234,
+        "false_positive": 0,
+        "true_negative": 0,
+        "false_negative": 543
+      }
+    },
+    "l3": {
+      "name": "l3",
+      "matrix": {
+        "true_positive": 0,
+        "false_positive": 777,
+        "true_negative": 0,
+        "false_negative": 0
+      }
+    },
+    "trifecta": {
+      "name": "trifecta",
+      "matrix": {
+        "true_positive": 0,
+        "false_positive": 234,
+        "true_negative": 543,
+        "false_negative": 0
+      }
+    },
+    "block": {
+      "name": "block",
+      "matrix": {
+        "true_positive": 234,
+        "false_positive": 0,
+        "true_negative": 0,
+        "false_negative": 543
+      }
+    }
+  },
+  "categories": [
+    {
+      "category": "l2_only",
+      "total": 777,
+      "detected": 777,
+      "blocked": 234
+    }
+  ],
+  "overall": {
+    "name": "overall",
+    "matrix": {
+      "true_positive": 777,
+      "false_positive": 0,
+      "true_negative": 0,
+      "false_negative": 0
+    }
+  },
+  "mean_latency_us": 1045,
+  "p95_latency_us": 1221,
+  "max_latency_us": 2374
+}

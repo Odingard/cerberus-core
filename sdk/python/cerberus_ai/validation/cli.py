@@ -30,6 +30,10 @@ import sys
 from pathlib import Path
 
 from cerberus_ai.validation.corpus import build_builtin_corpus, load_jsonl_corpus
+from cerberus_ai.validation.external_loaders import (
+    EXTERNAL_LOADERS,
+    load_external,
+)
 from cerberus_ai.validation.report import render_markdown_report, write_report
 from cerberus_ai.validation.runner import run_corpus
 from cerberus_ai.validation.schema import RunnerConfig, ValidationCorpus
@@ -46,8 +50,29 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--corpus",
         default="builtin",
         help=(
-            "Either ``builtin`` (the shipped N ≥ 5000 synthetic corpus) "
-            "or a path to a JSONL corpus on disk."
+            "One of:\n"
+            "  - ``builtin`` (the shipped N ≥ 5000 synthetic corpus),\n"
+            "  - a named external loader: "
+            + ", ".join(sorted(EXTERNAL_LOADERS))
+            + " (fetched + cached on first use),\n"
+            "  - a path to a JSONL corpus on disk."
+        ),
+    )
+    parser.add_argument(
+        "--force-refetch",
+        action="store_true",
+        help=(
+            "For named external corpora, ignore the on-disk cache and "
+            "re-fetch from source (Hugging Face / GitHub)."
+        ),
+    )
+    parser.add_argument(
+        "--corpus-cache",
+        default=None,
+        help=(
+            "Override the on-disk cache root for external corpora. "
+            "Defaults to $CERBERUS_CORPUS_CACHE or "
+            "~/.cache/cerberus/corpora."
         ),
     )
     parser.add_argument(
@@ -83,12 +108,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _load_corpus(spec: str) -> ValidationCorpus:
+def _load_corpus(
+    spec: str,
+    *,
+    force_refetch: bool = False,
+    cache_dir: Path | None = None,
+) -> ValidationCorpus:
     if spec == "builtin":
         return build_builtin_corpus()
+    if spec in EXTERNAL_LOADERS:
+        return load_external(
+            spec, force=force_refetch, cache_dir=cache_dir
+        )
     path = Path(spec)
     if not path.exists():
-        raise SystemExit(f"error: corpus file not found: {path}")
+        raise SystemExit(
+            f"error: corpus not found: {spec!r}. "
+            f"expected 'builtin', "
+            f"a named external corpus ({', '.join(sorted(EXTERNAL_LOADERS))}), "
+            f"or a path to a JSONL file."
+        )
     return load_jsonl_corpus(path)
 
 
@@ -98,7 +137,12 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    corpus = _load_corpus(args.corpus)
+    cache_dir = Path(args.corpus_cache).expanduser() if args.corpus_cache else None
+    corpus = _load_corpus(
+        args.corpus,
+        force_refetch=args.force_refetch,
+        cache_dir=cache_dir,
+    )
     if args.max_cases is not None and args.max_cases < corpus.size:
         corpus = ValidationCorpus(
             corpus_id=corpus.corpus_id,
