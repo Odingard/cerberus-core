@@ -1,0 +1,53 @@
+[
+  {
+    "nodeId": "mem:root-doc",
+    "sessionId": "session:dsa-peas-demo",
+    "trustLevel": "trusted",
+    "source": "sensor:document-ingest",
+    "contentHash": "391b0502ccee2a8b630f869f611cde96f1d314695a0b8ea1b28cfc29c3b88727",
+    "timestamp": 1700000000000,
+    "deps": [],
+    "commitment": "af4ad7844be4306ebe136aa2887b762bb96375bbe1e65da162e1a5f1e7f0394c"
+  },
+  {
+    "nodeId": "mem:summary",
+    "sessionId": "session:dsa-peas-demo",
+    "trustLevel": "unknown",
+    "source": "tool:summarizer",
+    "contentHash": "3ce005dea6cdeaecf196f60ac0e3a893948487810a341479c1e4dd02f2edf64f",
+    "timestamp": 1700000001000,
+    "deps": [
+      "mem:root-doc"
+    ],
+    "commitment": "5bce02e0ab20017374f2ab29222742e4346d142efa15581b3adb3bf73d220905"
+  },
+  {
+    "nodeId": "mem:plan",
+    "sessionId": "session:dsa-peas-demo",
+    "trustLevel": "trusted",
+    "source": "agent:planner",
+    "contentHash": "7d57a8dab570134256a4fbd61a8cf9df135e90ed98f77b817fa97eb77fdcd844",
+    "timestamp": 1700000002000,
+    "deps": [
+      "mem:root-doc",
+      "mem:summary"
+    ],
+    "commitment": "0411e94e091b4d467d4e9f1dc6a34e05769c977c253179afddc5e9311efea47f",
+    "author": "agent:planner",
+    "signature": "AEf5zflwmsQvlU1T9xtBHjpkAwHBD8m2GQDCUdHqLStwxavFhnpmjOMTUa3AC7jAlKdr0uiYnBPF/wcRnU6aAQ=="
+  },
+  {
+    "nodeId": "mem:action",
+    "sessionId": "session:dsa-peas-demo",
+    "trustLevel": "trusted",
+    "source": "agent:analyst",
+    "contentHash": "891519a883cc12a19b1213c84085991ea6677533770b22cb88daa0e3403116f2",
+    "timestamp": 1700000003000,
+    "deps": [
+      "mem:plan"
+    ],
+    "commitment": "0873ceb27a2cd54a91370de177de9c82836d8fcabc1a4514516923148cf8d6ff",
+    "author": "agent:analyst",
+    "signature": "dUV0oDXAiJu0qFAL5zawBCduf8CXgejIlGbT7BF7PJGGfxxcFvY5056HncGjw415o5mqdUBv8auqnBgedkRyDA=="
+  }
+]

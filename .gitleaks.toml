@@ -1,0 +1,22 @@
+# Cerberus is a secrets/injection *detection* engine — its test suite necessarily
+# contains synthetic, well-known secret-shaped fixtures used as detection inputs.
+# These are not real credentials. This allowlist scopes those fixtures so secret
+# scans report only genuine findings.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic detection-test fixtures (not real secrets)"
+paths = [
+  '''tests/.*\.test\.ts$''',
+]
+regexes = [
+  # AWS's own documentation example access key id
+  '''AKIAIOSFODNN7EXAMPLE''',
+  # Canonical jwt.io sample token (payload {"sub":"1234567890"})
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U''',
+  # Obvious placeholder credentials used in detection tests
+  '''sk_live_abc123''',
+  '''hunter2''',
+  '''postgres://admin:secret@db\.internal:5432/prod''',
+]

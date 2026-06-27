@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.js.map
+*.d.ts.map
+.env
+.env.*
+*.sqlite
+*.sqlite3
+coverage/
+.vitest/
+.DS_Store
+*.tgz
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.coverage
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
