@@ -456,6 +456,6 @@ The Enterprise edition is commercially licensed. See [cerberus.sixsenseenterpris
 
 <div align="center">
 
-Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com) · [cerberus.sixsenseenterprise.com](https://cerberus.sixsenseenterprise.com)
+Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com)
 
 </div>
