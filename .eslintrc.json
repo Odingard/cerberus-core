@@ -19,5 +19,19 @@
     "@typescript-eslint/no-floating-promises": "error",
     "no-console": "warn"
   },
+  "overrides": [
+    {
+      "files": ["examples/**/*.ts", "spec/**/*.ts"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/explicit-function-return-type": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["dist/", "node_modules/", "*.js"]
 }
