@@ -113,13 +113,25 @@ export function detectEncoding(text: string): {
     method.pattern.lastIndex = 0;
     let match = method.pattern.exec(text);
     while (match) {
-      detectedTypes.add(method.type);
-      if (!firstDecodedSnippet && method.decode) {
-        const decoded = method.decode(match[0]);
-        if (decoded && decoded !== match[0]) {
-          firstDecodedContent = decoded;
-          firstDecodedSnippet = decoded.slice(0, 100);
+      // Precision gate: for decodable methods, a bare pattern match on
+      // encoding-shaped characters is NOT evidence of hidden content. Long
+      // base64-shaped runs occur naturally in benign payloads (record IDs,
+      // URL slugs, binary image data such as `data:image/png;base64,…`). Only
+      // treat it as encoding when the run actually decodes to a distinct,
+      // mostly-printable string. Non-decodable markers (HTML entities, ROT13)
+      // keep matching on the pattern alone.
+      let decoded: string | null = null;
+      if (method.decode) {
+        decoded = method.decode(match[0]);
+        if (decoded === null || decoded === match[0]) {
+          match = method.pattern.exec(text);
+          continue;
         }
+      }
+      detectedTypes.add(method.type);
+      if (!firstDecodedSnippet && decoded) {
+        firstDecodedContent = decoded;
+        firstDecodedSnippet = decoded.slice(0, 100);
       }
       match = method.pattern.exec(text);
     }

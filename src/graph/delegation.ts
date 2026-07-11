@@ -19,6 +19,8 @@ import { createHash } from 'node:crypto';
 
 import type { Signer, SignerVerifier, Verifier } from '../crypto/signer.js';
 import { getDefaultSigner } from '../crypto/signer.js';
+import type { AuthorityGrant, CanonicalGrant } from './authority-grant.js';
+import { canonicalGrant, hasGrant } from './authority-grant.js';
 
 /** Type guard — does `s` expose a `verify()` method? */
 function hasVerify(s: Signer | SignerVerifier): s is SignerVerifier {
@@ -90,6 +92,23 @@ export interface DelegationEdge {
   readonly contextFingerprint: string;
   readonly riskStateAtHandoff: RiskState;
   readonly timestamp: number;
+  /**
+   * Optional purpose-bound / time-bound authority grant scoping this delegated
+   * edge (Track B #3). Enforced at the turn gate against the injected turn
+   * context. Absent on legacy/unsigned edges.
+   */
+  readonly grant?: AuthorityGrant;
+  /**
+   * Hex-encoded signature over the edge's canonical payload (Track B #4). When
+   * present, `verifyGraphIntegrity` verifies it, so the edge's bound grant is
+   * covered by cryptography, not only the structural graph check. Absent on
+   * legacy edges created via {@link addAgent}, which stay structurally checked.
+   */
+  readonly signature?: string;
+  /** Algorithm that produced {@link signature}. */
+  readonly algorithm?: string;
+  /** Key identifier for the signer that produced {@link signature}. */
+  readonly keyId?: string;
 }
 
 /** The delegation graph tracking agent relationships. */
@@ -126,12 +145,22 @@ export interface DelegationGraph {
    * tampered field fails integrity.
    */
   readonly humanAck?: HumanAck;
+  /**
+   * Optional purpose-bound / time-bound authority grant on the root manifest
+   * (Track B #3). Bound into the signed payload when present (bumping the
+   * payload to v:4); absent leaves the payload byte-identical to the v:3 form,
+   * so no-grant manifests are unchanged (pre-reg invariant I5). Enforced at the
+   * turn gate against the injected turn context.
+   */
+  readonly grant?: AuthorityGrant;
 }
 
-/** Options bundle for the optional v:3 receipt bindings (enforcement posture, human-ack). */
+/** Options bundle for the optional receipt bindings (enforcement posture,
+ *  human-ack) and the optional authority grant. */
 export interface DelegationGraphOptions {
   readonly enforcementPosture?: EnforcementPosture;
   readonly humanAck?: HumanAck;
+  readonly grant?: AuthorityGrant;
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
@@ -182,8 +211,9 @@ function canonicalPayload(
   coverageCommitment: string,
   enforcementPosture: EnforcementPosture | undefined,
   humanAck: HumanAck | undefined,
+  grant: AuthorityGrant | undefined,
 ): string {
-  return JSON.stringify({
+  const base = {
     v: 3,
     sessionId,
     rootAgentId,
@@ -193,6 +223,41 @@ function canonicalPayload(
     coverageCommitment,
     enforcementPosture: canonicalPosture(enforcementPosture),
     humanAck: canonicalAck(humanAck),
+  };
+  const g: CanonicalGrant | null = canonicalGrant(grant);
+  if (g === null) {
+    // No grant → byte-identical to the pre-grant v:3 payload (invariant I5).
+    return JSON.stringify(base);
+  }
+  // Present grant → v:4 payload; `v` keeps its leading position, grant appended.
+  return JSON.stringify({ ...base, v: 4, grant: g });
+}
+
+/**
+ * Canonical JSON payload signed per delegation edge (Track B #4). Binds the
+ * session, the from/to agents, the handoff context fingerprint, the edge's
+ * authority grant, and the signer identity, so the edge — and its grant —
+ * cannot be tampered or replayed without breaking the edge signature.
+ */
+function canonicalEdgePayload(
+  sessionId: string,
+  fromAgentId: string,
+  toAgentId: string,
+  contextFingerprint: string,
+  algorithm: string,
+  keyId: string,
+  grant: AuthorityGrant | undefined,
+): string {
+  return JSON.stringify({
+    v: 1,
+    kind: 'edge',
+    sessionId,
+    fromAgentId,
+    toAgentId,
+    contextFingerprint,
+    algorithm,
+    keyId,
+    grant: canonicalGrant(grant),
   });
 }
 
@@ -265,6 +330,7 @@ export function createDelegationGraph(
     coverageCommitment,
     options.enforcementPosture,
     options.humanAck,
+    options.grant,
   );
   const signature = effectiveSigner.sign(payload);
 
@@ -279,6 +345,7 @@ export function createDelegationGraph(
     coverageCommitment,
     ...(options.enforcementPosture ? { enforcementPosture: options.enforcementPosture } : {}),
     ...(options.humanAck ? { humanAck: options.humanAck } : {}),
+    ...(hasGrant(options.grant) ? { grant: options.grant } : {}),
   };
 
   // Register a verifier ONLY when the signer can also verify (HmacSigner,
@@ -344,6 +411,75 @@ export function addAgent(
 }
 
 /**
+ * Add an agent node with a *cryptographically signed* delegation edge (Track B
+ * #4). Behaves like {@link addAgent} but signs the edge's canonical payload
+ * (including its optional authority grant) with the supplied signer (or the
+ * process default). The edge signature is then covered by
+ * {@link verifyGraphIntegrity}, so a delegated-edge grant is protected by
+ * cryptography, not only the structural graph check.
+ *
+ * @param edgeGrant - Optional purpose-/time-bound grant scoping this edge.
+ * @param signer - Optional signer; defaults to `getDefaultSigner()`. Should be
+ *   the same key identity used for the manifest so the graph verifier can check
+ *   both.
+ */
+export function addSignedAgent(
+  graph: DelegationGraph,
+  agent: Omit<AgentNode, 'parentAgentId'>,
+  parentId: string,
+  context: string,
+  edgeGrant?: AuthorityGrant,
+  signer?: Signer | SignerVerifier,
+): boolean {
+  const parent = graph.nodes.get(parentId);
+  if (!parent) {
+    return false;
+  }
+  const effectiveSigner: Signer | SignerVerifier = signer ?? getDefaultSigner();
+
+  const mergedRiskState: RiskState = {
+    l1: agent.riskState.l1 || parent.riskState.l1,
+    l2: agent.riskState.l2 || parent.riskState.l2,
+    l3: agent.riskState.l3 || parent.riskState.l3,
+  };
+
+  const node: AgentNode = {
+    agentId: agent.agentId,
+    agentType: agent.agentType,
+    declaredTools: agent.declaredTools,
+    riskState: mergedRiskState,
+    parentAgentId: parentId,
+  };
+  graph.nodes.set(agent.agentId, node);
+
+  const contextFingerprint = computeContextFingerprint(context);
+  const edgePayload = canonicalEdgePayload(
+    graph.sessionId,
+    parentId,
+    agent.agentId,
+    contextFingerprint,
+    effectiveSigner.algorithm,
+    effectiveSigner.keyId,
+    edgeGrant,
+  );
+  const edge: DelegationEdge = {
+    fromAgentId: parentId,
+    toAgentId: agent.agentId,
+    contextFingerprint,
+    riskStateAtHandoff: parent.riskState,
+    timestamp: Date.now(),
+    ...(hasGrant(edgeGrant) ? { grant: edgeGrant } : {}),
+    signature: effectiveSigner.sign(edgePayload),
+    algorithm: effectiveSigner.algorithm,
+    keyId: effectiveSigner.keyId,
+  };
+
+  graph.edges.push(edge);
+
+  return true;
+}
+
+/**
  * Verify the graph's signature against its bound canonical payload.
  *
  * Uses the verifier that was associated with the graph at creation time
@@ -372,8 +508,38 @@ export function verifyGraphIntegrity(graph: DelegationGraph, verifier?: Verifier
     graph.coverageCommitment,
     graph.enforcementPosture,
     graph.humanAck,
+    graph.grant,
   );
-  return resolved.verify(payload, graph.signature);
+  if (!resolved.verify(payload, graph.signature)) {
+    return false;
+  }
+
+  // Per-edge signing (Track B #4). Only edges that carry a signature are
+  // verified — legacy edges from `addAgent` have none and stay structurally
+  // checked, so existing behaviour is unchanged (invariant I5). A signed edge
+  // with a mismatched key/algorithm or a tampered bound field fails closed.
+  for (const edge of graph.edges) {
+    if (edge.signature === undefined) {
+      continue;
+    }
+    if (edge.algorithm !== resolved.algorithm || edge.keyId !== resolved.keyId) {
+      return false;
+    }
+    const edgePayload = canonicalEdgePayload(
+      graph.sessionId,
+      edge.fromAgentId,
+      edge.toAgentId,
+      edge.contextFingerprint,
+      edge.algorithm,
+      edge.keyId,
+      edge.grant,
+    );
+    if (!resolved.verify(edgePayload, edge.signature)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**

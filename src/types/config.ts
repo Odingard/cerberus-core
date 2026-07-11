@@ -129,6 +129,20 @@ export interface AlwaysInspectRegions {
   readonly toolResults?: boolean;
 }
 
+/**
+ * Authority-grant enforcement context for the per-turn manifest gate
+ * (Track B #3). The clock is injected here so the enforcement decision stays a
+ * pure function of its inputs.
+ */
+export interface AuthorityConfig {
+  /** Injected clock supplying the turn timestamp for validity-window checks.
+   *  Read at the interceptor boundary, not inside the scored path. Default:
+   *  `Date.now`. */
+  readonly now?: () => number;
+  /** Purpose the current turn asserts, matched against a grant's bound scopes. */
+  readonly declaredPurpose?: string;
+}
+
 /** Main configuration for cerberus.guard(). */
 export interface CerberusConfig {
   /** Maximum action Cerberus will take. Default: 'alert'. */
@@ -185,9 +199,8 @@ export interface CerberusConfig {
   /**
    * Enable OpenTelemetry instrumentation.
    * When true, Cerberus emits one span (`cerberus.tool_call`) and updates
-   * three metrics per tool call. The OpenTelemetry recorder ships in the
-   * enterprise tier; it requires `@opentelemetry/api` and an OTel SDK +
-   * exporter registered in your app.
+   * three metrics per tool call. Requires `@opentelemetry/api` (already a
+   * dependency) and an OTel SDK + exporter registered in your app.
    * Default: false.
    */
   readonly opentelemetry?: boolean;
@@ -259,6 +272,25 @@ export interface CerberusConfig {
    * graph at creation (same-process sign-and-verify).
    */
   readonly manifestVerifier?: Verifier;
+
+  /**
+   * Authority-grant enforcement context (Track B #3). When the signed manifest
+   * (or an active delegation edge) carries a purpose-bound / time-bound
+   * authority grant, the per-turn gate enforces it against this context:
+   *
+   *   - `now()` supplies the turn timestamp checked against the grant's
+   *     validity window. It is the injected clock — read at the interceptor
+   *     boundary and passed into the pure enforcement function, never read
+   *     inside the scored decision path. Defaults to `Date.now`.
+   *   - `declaredPurpose` is the purpose the current turn asserts, matched
+   *     against the grant's bound scopes under a declarative scope-match rule.
+   *
+   * A grant that is expired, not-yet-valid, or purpose-mismatched fails closed
+   * (BLOCKED), exactly like an invalid manifest signature. Only used when
+   * `multiAgent` is true and a grant is present. Default: undefined (window
+   * checks use `Date.now`; no purpose is asserted).
+   */
+  readonly authority?: AuthorityConfig;
 
   /**
    * Enforcement gateway configuration.
