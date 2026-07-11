@@ -55,6 +55,18 @@ export { formatBlockedToolMessage } from './types/execution.js';
 export { guard } from './middleware/wrap.js';
 export type { GuardResult, MemoryGuardOptions } from './middleware/wrap.js';
 
+// Zero-config onboarding (spike): auto-wrap + auto-classify + observe-only default.
+export { autoGuard } from './middleware/auto-guard.js';
+export type { AutoGuardOptions, AutoGuardResult } from './middleware/auto-guard.js';
+export {
+  classifyTool,
+  classifyTools,
+  toTrustOverrides,
+  toOutboundTools,
+  formatClassificationTable,
+} from './middleware/auto-classify.js';
+export type { ToolRole, ToolClassification } from './middleware/auto-classify.js';
+
 // Opt-in memory trace capture (records real read/write sequences, replayable)
 export {
   createTraceRecorder,
