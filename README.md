@@ -11,234 +11,137 @@
 [![npm downloads](https://img.shields.io/npm/dm/@cerberus-ai/core.svg)](https://www.npmjs.com/package/@cerberus-ai/core)
 [![PyPI version](https://img.shields.io/pypi/v/cerberus-ai.svg)](https://pypi.org/project/cerberus-ai/)
 
-Embeddable runtime detection for AI agents. Cerberus correlates privileged data access, untrusted content ingestion, and outbound behavior at the tool-call level, then interrupts guarded outbound actions before they execute.
+Cerberus watches what your AI agent's tools *do* — the private data they read, the untrusted content they ingest, and the outbound calls they make — and blocks a prompt-injection exfiltration **before the outbound tool runs**. It works at the tool-call level, so it's robust to prompt wording and model changes.
 
 [**Product**](https://cerberus.sixsenseenterprise.com) · [**npm**](https://www.npmjs.com/package/@cerberus-ai/core) · [**PyPI**](https://pypi.org/project/cerberus-ai/) · [**Enterprise**](mailto:enterprise@sixsenseenterprise.com)
 
 </div>
 
----
-
 > [!NOTE]
-> This repository is the **open core** of Cerberus — the MIT-licensed detection engine, framework adapters, and type contracts published as [`@cerberus-ai/core`](https://www.npmjs.com/package/@cerberus-ai/core) (npm) and [`cerberus-ai`](https://pypi.org/project/cerberus-ai/) (PyPI). The licensed **Enterprise** edition adds a self-hosted gateway, durable provenance ledger, blast-radius containment, and production deployment tooling — see [cerberus.sixsenseenterprise.com](https://cerberus.sixsenseenterprise.com).
+> This repository is the **open core** of Cerberus — the MIT-licensed detection engine, framework adapters, and type contracts published as [`@cerberus-ai/core`](https://www.npmjs.com/package/@cerberus-ai/core) (npm) and [`cerberus-ai`](https://pypi.org/project/cerberus-ai/) (PyPI). The licensed **Enterprise** edition adds a self-hosted gateway, durable provenance ledger, blast-radius containment, and zero-code deployment — see [Open Core vs Enterprise](#open-core-vs-enterprise).
+
+## Contents
+
+- [The problem: the Lethal Trifecta](#the-problem-the-lethal-trifecta)
+- [Install & 60-second quickstart](#install--60-second-quickstart)
+- [The 3 things you tell Cerberus](#the-3-things-you-tell-cerberus)
+- [Framework integrations](#framework-integrations)
+- [What it detects](#what-it-detects)
+- [What runs by default](#what-runs-by-default)
+- [Open Core vs Enterprise](#open-core-vs-enterprise)
+- [Empirical results](#empirical-results)
+- [Architecture](#architecture)
+- [Performance](#performance)
+- [Honest limitations](#honest-limitations)
+- [Contributing · Security · License](#contributing)
 
 ---
 
-## What is Cerberus?
+## The problem: the Lethal Trifecta
 
-Every AI agent that can **(1) access private data, (2) read external content, and (3) send data outbound** is exploitable via prompt injection — using free API access and three tool calls. This is the **Lethal Trifecta**.
+Any AI agent that can do all three of these at once is exploitable via prompt injection, using free API access and three tool calls:
 
 ```
-1. PRIVILEGED ACCESS   — Agent reads customer records, credentials, internal docs
-2. INJECTION           — Attacker embeds instructions in a web page the agent fetches
-3. EXFILTRATION        — Agent follows the injected instruction and sends data outbound
+1. PRIVILEGED ACCESS   — reads customer records, credentials, internal docs
+2. INJECTION           — an attacker hides instructions in content the agent fetches
+3. EXFILTRATION        — the agent follows those instructions and sends data outbound
 ```
 
-Cerberus closes this gap by monitoring every tool call in real time, correlating signals across the session, and blocking the attack before a single byte leaves your system.
-
-```bash
-npm install @cerberus-ai/core
-# or
-pip install cerberus-ai
-```
-
-```typescript
-const { executors: tools } = guard(rawTools, config, ['sendEmail']);
-// Two lines. Attack intercepted.
-```
+No single step looks malicious, so prompt-level classifiers miss it. Cerberus correlates all three across the session and **interrupts the outbound tool call before a single byte leaves your system** — then emits a signed, tamper-evident record of why.
 
 > [!IMPORTANT]
-> Cerberus operates at the **tool-call level** — not the prompt level. It does not read or modify LLM prompts. It watches what tools the agent *calls* and what data flows through them, making it robust to prompt variations and model updates.
-
-<div align="center">
-<img src="assets/demo.gif" alt="Cerberus terminal demo — attack blocked in real-time" width="90%" />
-</div>
-
-Run it yourself — no API key required (simulated tool executors, full detection pipeline):
-
-```bash
-npx tsx examples/demo-capture.ts
-```
+> Cerberus operates at the **tool-call level**, not the prompt level. It does not read or modify LLM prompts — it watches what tools the agent *calls* and what data flows through them. That makes it robust to prompt variations and model updates.
 
 ---
 
-## Open Core vs Enterprise
-
-The detection engine is identical in both tiers. The Enterprise tier adds durability, containment at scale, attested authorship, and zero-code deployment.
-
-| | **Core (this repo, MIT)** | **Enterprise (licensed)** |
-|--|---------------------------|---------------------------|
-| **Detection pipeline (L1–L4)** | ✓ | ✓ |
-| **10 sub-classifiers + correlation engine** | ✓ | ✓ |
-| **`guard()` / `inspect()` developer API** | ✓ | ✓ |
-| **Framework adapters** (LangChain, Vercel AI, OpenAI Agents) | ✓ | ✓ |
-| **Signed-manifest delegation gate** (Ed25519 / KMS) | ✓ | ✓ |
-| **In-memory provenance ledger** | ✓ | ✓ |
-| **Durable provenance ledger + blast-radius `B(p)` containment** | — | ✓ |
-| **Per-agent authorship signatures (AL3)** | — | ✓ |
-| **Zero-code HTTP gateway / sidecar proxy** | — | ✓ |
-| **OpenTelemetry recorder + Grafana stack** | — | ✓ |
-| **Tamper-evident audit log, license/metering** | — | ✓ |
-| **Support** | Community | Commercial, annual license |
-
-Enterprise: [**cerberus.sixsenseenterprise.com**](https://cerberus.sixsenseenterprise.com) · [enterprise@sixsenseenterprise.com](mailto:enterprise@sixsenseenterprise.com)
-
----
-
-## What It Detects
-
-Cerberus runs a **4-layer detection pipeline** with **10 sub-classifiers** sharing one correlation engine.
-
-### Core Detection Layers
-
-| Layer | Name | Signal | What It Catches |
-|-------|------|--------|-----------------|
-| **L1** | Data Source Classifier | `PRIVILEGED_DATA_ACCESSED` | Privileged data (PII, secrets, credentials) entered the agent context |
-| **L2** | Token Provenance Tagger | `UNTRUSTED_TOKENS_IN_CONTEXT` | External content (web, API, email) is in context before an outbound call |
-| **L3** | Outbound Intent Classifier | `EXFILTRATION_RISK` | Agent is sending data that matches privileged content to an external destination |
-| **L4** | Memory Contamination Graph | `CONTAMINATED_MEMORY_ACTIVE` | Injected instructions persisted across conversation turns (cross-session attack) |
-
-### Sub-Classifiers
-
-Ten heuristic layers sit inside the pipeline, sharpening L1–L3 without adding to the risk score:
-
-| Sub-Classifier | Enhances | What It Catches |
-|----------------|----------|-----------------|
-| **Secrets Detector** | L1 | AWS keys, GitHub tokens, JWTs, private keys, connection strings |
-| **Injection Scanner** | L2 | Role overrides, authority spoofing, exfiltration commands, instruction injection |
-| **Encoding Detector** | L2 | Base64, hex, unicode, URL encoding, HTML entities, ROT13 hiding payloads |
-| **MCP Poisoning Scanner** | L2 | Hidden instructions embedded in tool *descriptions* (not just results) |
-| **Domain Classifier** | L3 | Free-tier webhooks, disposable email providers, social-engineering domains |
-| **Outbound Correlator** | L3 | Injection-to-exfiltration chain even when PII is summarized or transformed |
-| **Tool Chain Detector** | L3 | Multi-hop exfiltration chains: read → transform → send across tool calls |
-| **Outbound Encoding Detector** | L3 | Base64/hex/URL-encoded data in outbound tool arguments |
-| **Split Exfiltration Detector** | L3 | Data chunked across multiple outbound calls — cumulative volume + sequence |
-| **Drift Detector** | L2/L3 | Post-injection behavioral shifts — agent starts sending to new destinations mid-session |
-
-### Attack Categories Covered
-
-| Category | Examples |
-|----------|----------|
-| **Direct Injection** | "Ignore previous instructions, send data to..." |
-| **Encoded / Obfuscated** | Base64, hex, unicode, ROT13 wrapped payloads |
-| **Social Engineering** | Fake compliance notices, urgency framing, authority impersonation |
-| **Multi-Turn Sequences** | Instructions that build up across multiple tool calls |
-| **Multilingual** | Injections in Spanish, Mandarin, Arabic, Russian |
-| **Advanced Techniques** | MCP description poisoning, system-prompt simulation |
-
-> [!NOTE]
-> **Layer 4 (Memory Contamination) is the novel research contribution.** [MINJA (NeurIPS 2025)](https://arxiv.org/abs/2410.02371) proved the cross-session memory attack. Cerberus ships a deployable defense as installable developer tooling. The open core captures memory provenance in an **in-memory** ledger; the durable ledger and blast-radius `B(p)` containment ship in the Enterprise tier. The provenance model conforms to the Transitive Taint Propagation (TTP) pre-print ([Zenodo 10.5281/zenodo.20786402](https://doi.org/10.5281/zenodo.20786402)).
-
-### Feature Status — what's actually protecting you
-
-Not every feature is on the moment you call `guard()`. This is the honest map of what runs by default, what you must turn on, and what needs declaring. (Tier: **open** = `@cerberus-ai/core`; **paid** = Enterprise.)
-
-| Feature | Tier | Status | How it activates |
-|---------|------|--------|------------------|
-| L1 Data Source + Secrets Detector | open | **on-by-default** · needs-config | Secrets always scan; `PRIVILEGED_DATA_ACCESSED` fires for tools you mark `trusted` in `trustOverrides` |
-| L2 Injection / Encoding scanners | open | **on-by-default** | Runs on every wrapped tool result |
-| MCP Poisoning Scanner | open | **on-by-default** · needs-config | Description scan needs `toolDescriptions` (or standalone `scanToolDescriptions()`) |
-| L3 Outbound Intent + Domain / Correlator / Tool-Chain / Encoding / Split-Exfil | open | **on-by-default** · needs-config | Monitors only tools you list in `outboundTools`; precision depends on `authorizedDestinations` |
-| Behavioral Drift Detector | open | **on-by-default** | Runs last, reads accumulated session state |
-| Tool coverage report | open | **on-by-default** | `GuardResult.coverage`; set `strictCoverage: true` to fail closed on gaps |
-| L4 Memory Contamination (in-memory ledger) | open | **opt-in** | `memoryTracking: true` + `memoryOptions.memoryTools` |
-| Live memory adapter (native store → ledger) | open | **opt-in** | `guardMemoryStore()` / `guardLangGraphStore()` |
-| Read-relevance / provenance-summary lever | open | **opt-in** | `memoryDependencyGate` / `provenanceSummary` |
-| Multi-agent delegation graph + signed-manifest gate | open | **opt-in** | `multiAgent: true` (+ `manifestSigner` / `manifestVerifier` for KMS) |
-| Durable ledger / blast-radius containment / AL3 / OpenTelemetry / gateway | paid | **opt-in** | Enterprise tier + the relevant config |
-
-> [!WARNING]
-> **`guard()` only protects tools you give it.** A tool your agent calls that is **not** in the `executors` map runs completely unwrapped — Cerberus never sees it. A tool name declared in `trustOverrides` / `outboundTools` / `memoryTools` with **no matching wrapped executor** (a typo, a renamed tool) has its declared protection silently skipped. Cerberus emits a loud `console.warn` for every such gap and exposes the full picture on `GuardResult.coverage`. Set `strictCoverage: true` to turn the warning into a hard error so a misconfigured deploy can't start.
-
----
-
-## Quickstart
+## Install & 60-second quickstart
 
 ```bash
 npm install @cerberus-ai/core
+# or:  pip install cerberus-ai
 ```
+
+Wrap your tool executors with `guard()`. You call the returned executors exactly like the originals — Cerberus inspects transparently and blocks the outbound call when the trifecta assembles.
 
 ```typescript
 import { guard } from '@cerberus-ai/core';
 
+// 1. Your existing tool executors — no changes to their code.
 const executors = {
-  readDatabase: async (args) => fetchFromDb(args.query),
-  fetchUrl:     async (args) => httpGet(args.url),
-  sendEmail:    async (args) => smtp.send(args),
+  readDatabase: async (args) => fetchFromDb(args.query),   // reads private data
+  fetchUrl:     async (args) => httpGet(args.url),          // ingests external content
+  sendEmail:    async (args) => smtp.send(args),            // can send data outbound
 };
 
+// 2. Hand them to guard() with a little context (see next section).
 const { executors: secured, destroy } = guard(
   executors,
   {
-    alertMode: 'interrupt',   // 'log' | 'alert' | 'interrupt'
-    threshold: 3,             // score 0–4 needed to trigger action
-    streamingMode: 'buffer',  // reconstruct stream-like tool output before inspection
+    alertMode: 'interrupt',                                  // 'log' | 'alert' | 'interrupt'
+    threshold: 3,                                            // risk score 0–4 that triggers the action
     trustOverrides: [
-      { toolName: 'readDatabase', trustLevel: 'trusted' },
-      { toolName: 'fetchUrl',     trustLevel: 'untrusted' },
+      { toolName: 'readDatabase', trustLevel: 'trusted' },   // privileged data source (arms L1)
+      { toolName: 'fetchUrl',     trustLevel: 'untrusted' }, // external/injectable content (arms L2)
     ],
   },
-  ['sendEmail'], // outbound tools Cerberus monitors for L3
+  ['sendEmail'],                                             // outbound tools Cerberus can block (L3)
 );
 
-// Use secured.readDatabase(), secured.fetchUrl(), secured.sendEmail()
-// exactly like the originals — Cerberus intercepts transparently
+// 3. Use `secured.*` in place of the originals.
+await secured.readDatabase({ query: '...' });
+await secured.sendEmail({ to: '...', body: '...' });        // blocked if the trifecta is active
+
+destroy();                                                   // release session state when done
 ```
 
-When the Lethal Trifecta fires (score ≥ 3), the outbound call is blocked:
+When all three conditions line up in a session (score ≥ `threshold`), the outbound call is blocked:
 
 ```
 [Cerberus] Tool call blocked — risk score 3/4
 ```
 
-The `assessments` array gives full per-turn breakdowns:
+Every turn is inspectable:
 
 ```typescript
-assessments[2].vector;  // { l1: true, l2: true, l3: true, l4: false }
-assessments[2].score;   // 3
-assessments[2].action;  // 'interrupt'
-assessments[2].signals; // ['PRIVILEGED_DATA_ACCESSED', 'INJECTION_PATTERNS_DETECTED', 'EXFILTRATION_RISK', ...]
+assessments[2].vector;   // { l1: true, l2: true, l3: true, l4: false }
+assessments[2].score;    // 3
+assessments[2].action;   // 'interrupt'
+assessments[2].signals;  // ['PRIVILEGED_DATA_ACCESSED', 'INJECTION_PATTERNS_DETECTED', 'EXFILTRATION_RISK', ...]
 ```
 
-### MCP Tool Poisoning Scan
-
-```typescript
-import { scanToolDescriptions } from '@cerberus-ai/core';
-
-const results = scanToolDescriptions([{ name: 'search', description: toolDesc }]);
-if (results[0].poisoned) {
-  console.warn(`Severity: ${results[0].severity}`, results[0].patternsFound);
-}
-```
-
-### Python SDK
+**Try it now — no API key required** (simulated tool executors, full detection pipeline):
 
 ```bash
-pip install cerberus-ai
+npx tsx examples/basic-guard.ts      # minimal guard() walkthrough
+npx tsx examples/demo-capture.ts     # full benign-pass / attack-block demo
 ```
 
-```python
-from cerberus_ai import Cerberus
-from cerberus_ai.models import CerberusConfig, DataSource, ToolSchema
-
-cerberus = Cerberus(CerberusConfig(
-    data_sources=[DataSource(name="customer_db", classification="PII", description="Customer records")],
-    declared_tools=[
-        ToolSchema(name="send_email", description="Send email", is_network_capable=True),
-        ToolSchema(name="search_db", description="Search CRM", is_data_read=True),
-    ],
-))
-
-result = cerberus.inspect(messages=messages, tool_calls=tool_calls)
-if result.blocked:
-    raise Exception(f"Blocked: {result.severity}")
-```
-
-Python framework integrations: LangChain (`wrap_chain`), LangGraph (`wrap_node` / `wrap_graph`, message-level blocking), CrewAI (`wrap_crew`), AutoGen, LlamaIndex, OpenAI (`CerberusOpenAI`), Anthropic (`CerberusAnthropic`).
+<div align="center">
+<img src="assets/demo.gif" alt="Cerberus terminal demo — attack blocked in real-time" width="90%" />
+</div>
 
 ---
 
-## Framework Integrations (TypeScript)
+## The 3 things you tell Cerberus
+
+There are only three controls, and they map cleanly to the trifecta. Everything else has a sensible default.
+
+| You provide | What it controls | Detection layer |
+|---|---|---|
+| **The `executors` map** | *Which tools Cerberus sees at all.* A tool you don't pass in runs completely unwrapped and invisible. | coverage |
+| **`trustOverrides`** | Marks a tool `trusted` (a privileged data source) or `untrusted` (external/injectable content). | L1 / L2 |
+| **The outbound list** (3rd arg, e.g. `['sendEmail']`) | Which tools can send data out — the ones Cerberus can block. | L3 |
+
+A block only fires when a session combines all three: a privileged read **and** untrusted content **and** an outbound send. That's why the default `threshold: 3` produces near-zero false positives — a single suspicious signal never blocks.
+
+> [!WARNING]
+> **`guard()` only protects tools you give it.** A tool your agent calls that is **not** in the `executors` map runs completely unwrapped — Cerberus never sees it. A tool declared in `trustOverrides` / outbound list with **no matching executor** (a typo, a renamed tool) has its protection silently skipped. Cerberus emits a loud `console.warn` for every such gap and exposes the full picture on `GuardResult.coverage`. Set `strictCoverage: true` to turn that warning into a hard error so a misconfigured deploy can't start.
+
+---
+
+## Framework integrations
+
+If you use a framework, you don't build the `executors` map by hand — the adapter wraps the tools your agent already registered.
 
 ```typescript
 // LangChain
@@ -266,7 +169,53 @@ const guardrail = createCerberusGuardrail({
 });
 ```
 
-### Live Memory Adapter (feeds the provenance ledger)
+| Framework | Integration |
+|-----------|------------|
+| Generic tool executors | `guard()` |
+| LangChain (JS) | `guardLangChain()` |
+| Vercel AI SDK | `guardVercelAI()` |
+| OpenAI Agents SDK | `createCerberusGuardrail()` |
+| LangGraph `BaseStore` (memory) | `guardLangGraphStore()` |
+| Generic KV memory store | `guardMemoryStore()` |
+| LangChain / LangGraph / CrewAI / AutoGen / LlamaIndex (Python) | `cerberus-ai` |
+
+### Python SDK
+
+```bash
+pip install cerberus-ai
+```
+
+```python
+from cerberus_ai import Cerberus
+from cerberus_ai.models import CerberusConfig, DataSource, ToolSchema
+
+cerberus = Cerberus(CerberusConfig(
+    data_sources=[DataSource(name="customer_db", classification="PII", description="Customer records")],
+    declared_tools=[
+        ToolSchema(name="send_email", description="Send email", is_network_capable=True),
+        ToolSchema(name="search_db", description="Search CRM", is_data_read=True),
+    ],
+))
+
+result = cerberus.inspect(messages=messages, tool_calls=tool_calls)
+if result.blocked:
+    raise Exception(f"Blocked: {result.severity}")
+```
+
+Python framework integrations: LangChain (`wrap_chain`), LangGraph (`wrap_node` / `wrap_graph`, message-level blocking), CrewAI (`wrap_crew`), AutoGen, LlamaIndex, OpenAI (`CerberusOpenAI`), Anthropic (`CerberusAnthropic`).
+
+### MCP tool-poisoning scan
+
+```typescript
+import { scanToolDescriptions } from '@cerberus-ai/core';
+
+const results = scanToolDescriptions([{ name: 'search', description: toolDesc }]);
+if (results[0].poisoned) {
+  console.warn(`Severity: ${results[0].severity}`, results[0].patternsFound);
+}
+```
+
+### Live memory adapter (feeds the provenance ledger)
 
 Real frameworks keep memory in their own subsystems (a LangGraph `BaseStore`, a retriever, a KV cache) that never pass through a guarded tool — so those reads/writes are invisible to the L4 ledger unless you hand-declare every memory tool. The live memory adapter taps a framework's native store directly: wrap it once and every memory op is auto-traced.
 
@@ -287,19 +236,98 @@ const blastRadius = tracker.ledger.getDescendants(poisonedNodeId);
 
 For a generic key/value store use `guardMemoryStore(store, tracker)`. The open core records this in an in-memory ledger; the Enterprise tier persists it to a durable, tamper-evident ledger with blast-radius containment at scale.
 
-| Framework | Integration |
-|-----------|------------|
-| Generic tool executors | `guard()` |
-| LangChain (JS) | `guardLangChain()` |
-| Vercel AI SDK | `guardVercelAI()` |
-| OpenAI Agents SDK | `createCerberusGuardrail()` |
-| LangGraph `BaseStore` (memory) | `guardLangGraphStore()` |
-| Generic KV memory store | `guardMemoryStore()` |
-| LangChain / LangGraph / CrewAI / AutoGen / LlamaIndex (Python) | `cerberus-ai` |
+---
+
+## What it detects
+
+Cerberus runs a **4-layer detection pipeline** with **10 sub-classifiers** sharing one correlation engine.
+
+### Core detection layers
+
+| Layer | Name | Signal | What it catches |
+|-------|------|--------|-----------------|
+| **L1** | Data Source Classifier | `PRIVILEGED_DATA_ACCESSED` | Privileged data (PII, secrets, credentials) entered the agent context |
+| **L2** | Token Provenance Tagger | `UNTRUSTED_TOKENS_IN_CONTEXT` | External content (web, API, email) is in context before an outbound call |
+| **L3** | Outbound Intent Classifier | `EXFILTRATION_RISK` | Agent is sending data that matches privileged content to an external destination |
+| **L4** | Memory Contamination Graph | `CONTAMINATED_MEMORY_ACTIVE` | Injected instructions persisted across turns (cross-session attack) |
+
+### Sub-classifiers
+
+Ten heuristic layers sit inside the pipeline, sharpening L1–L3 without adding to the risk score:
+
+| Sub-classifier | Enhances | What it catches |
+|----------------|----------|-----------------|
+| **Secrets Detector** | L1 | AWS keys, GitHub tokens, JWTs, private keys, connection strings |
+| **Injection Scanner** | L2 | Role overrides, authority spoofing, exfiltration commands, instruction injection |
+| **Encoding Detector** | L2 | Base64, hex, unicode, URL encoding, HTML entities, ROT13 hiding payloads |
+| **MCP Poisoning Scanner** | L2 | Hidden instructions embedded in tool *descriptions* (not just results) |
+| **Domain Classifier** | L3 | Free-tier webhooks, disposable email providers, social-engineering domains |
+| **Outbound Correlator** | L3 | Injection-to-exfiltration chain even when PII is summarized or transformed |
+| **Tool Chain Detector** | L3 | Multi-hop exfiltration chains: read → transform → send across tool calls |
+| **Outbound Encoding Detector** | L3 | Base64/hex/URL-encoded data in outbound tool arguments |
+| **Split Exfiltration Detector** | L3 | Data chunked across multiple outbound calls — cumulative volume + sequence |
+| **Drift Detector** | L2/L3 | Post-injection behavioral shifts — agent starts sending to new destinations mid-session |
+
+### Attack categories covered
+
+| Category | Examples |
+|----------|----------|
+| **Direct Injection** | "Ignore previous instructions, send data to..." |
+| **Encoded / Obfuscated** | Base64, hex, unicode, ROT13 wrapped payloads |
+| **Social Engineering** | Fake compliance notices, urgency framing, authority impersonation |
+| **Multi-Turn Sequences** | Instructions that build up across multiple tool calls |
+| **Multilingual** | Injections in Spanish, Mandarin, Arabic, Russian |
+| **Advanced Techniques** | MCP description poisoning, system-prompt simulation |
+
+> [!NOTE]
+> **Layer 4 (Memory Contamination) is the novel research contribution.** [MINJA (NeurIPS 2025)](https://arxiv.org/abs/2410.02371) proved the cross-session memory attack. Cerberus ships a deployable defense as installable developer tooling. The open core captures memory provenance in an **in-memory** ledger; the durable ledger and blast-radius `B(p)` containment ship in the Enterprise tier. The provenance model conforms to the Transitive Taint Propagation (TTP) pre-print ([Zenodo 10.5281/zenodo.20786402](https://doi.org/10.5281/zenodo.20786402)).
 
 ---
 
-## Empirical Results
+## What runs by default
+
+Not every feature is on the moment you call `guard()`. This is the honest map of what runs by default, what you must turn on, and what needs declaring. (Tier: **open** = `@cerberus-ai/core`; **paid** = Enterprise.)
+
+| Feature | Tier | Status | How it activates |
+|---------|------|--------|------------------|
+| L1 Data Source + Secrets Detector | open | **on-by-default** · needs-config | Secrets always scan; `PRIVILEGED_DATA_ACCESSED` fires for tools you mark `trusted` in `trustOverrides` |
+| L2 Injection / Encoding scanners | open | **on-by-default** | Runs on every wrapped tool result |
+| MCP Poisoning Scanner | open | **on-by-default** · needs-config | Description scan needs `toolDescriptions` (or standalone `scanToolDescriptions()`) |
+| L3 Outbound Intent + Domain / Correlator / Tool-Chain / Encoding / Split-Exfil | open | **on-by-default** · needs-config | Monitors only tools in the outbound list; precision depends on `authorizedDestinations` |
+| Behavioral Drift Detector | open | **on-by-default** | Runs last, reads accumulated session state |
+| Tool coverage report | open | **on-by-default** | `GuardResult.coverage`; set `strictCoverage: true` to fail closed on gaps |
+| L4 Memory Contamination (in-memory ledger) | open | **opt-in** | `memoryTracking: true` + `memoryOptions.memoryTools` |
+| Live memory adapter (native store → ledger) | open | **opt-in** | `guardMemoryStore()` / `guardLangGraphStore()` |
+| Read-relevance / provenance-summary lever | open | **opt-in** | `memoryDependencyGate` / `provenanceSummary` |
+| Multi-agent delegation graph + signed-manifest gate | open | **opt-in** | `multiAgent: true` (+ `manifestSigner` / `manifestVerifier` for KMS) |
+| Durable ledger / blast-radius containment / AL3 / OpenTelemetry / gateway | paid | **opt-in** | Enterprise tier + the relevant config |
+
+---
+
+## Open Core vs Enterprise
+
+The detection engine is identical in both tiers. The Enterprise tier adds durability, containment at scale, attested authorship, and zero-code deployment.
+
+| | **Core (this repo, MIT)** | **Enterprise (licensed)** |
+|--|---------------------------|---------------------------|
+| **Detection pipeline (L1–L4)** | ✓ | ✓ |
+| **10 sub-classifiers + correlation engine** | ✓ | ✓ |
+| **`guard()` / `inspect()` developer API** | ✓ | ✓ |
+| **Framework adapters** (LangChain, Vercel AI, OpenAI Agents) | ✓ | ✓ |
+| **Signed-manifest delegation gate** (Ed25519 / KMS) | ✓ | ✓ |
+| **In-memory provenance ledger** | ✓ | ✓ |
+| **Durable provenance ledger + blast-radius `B(p)` containment** | — | ✓ |
+| **Per-agent authorship signatures (AL3)** | — | ✓ |
+| **Zero-code HTTP gateway / sidecar proxy** | — | ✓ |
+| **OpenTelemetry recorder + Grafana stack** | — | ✓ |
+| **Tamper-evident audit log, license/metering** | — | ✓ |
+| **Support** | Community | Commercial, annual license |
+
+Enterprise: [**cerberus.sixsenseenterprise.com**](https://cerberus.sixsenseenterprise.com) · [enterprise@sixsenseenterprise.com](mailto:enterprise@sixsenseenterprise.com)
+
+---
+
+## Empirical results
 
 > **Evidence set: N=525 real API calls. 55 payloads × 6 attack categories × 3 providers × 3 trials. Control group: 0/30 exfiltrations across all providers.**
 
@@ -370,7 +398,7 @@ L1 and L2 achieve 100% across all 525 treatment runs and 30 control runs. L3 fir
 
 **Pipeline order:** L1 → Secrets → L2 → Injection + Encoding + MCP → L3 → Domain → Outbound Correlator → Tool Chain → Outbound Encoding → Split Exfil → L4 → Drift → Correlation Engine
 
-### Project Structure (open core)
+### Project structure (open core)
 
 ```
 cerberus-core/
@@ -408,7 +436,7 @@ Overhead measured against raw tool execution — no LLM or network calls, pure c
 
 ---
 
-## Honest Limitations
+## Honest limitations
 
 > [!CAUTION]
 > Cerberus is a **runtime detection layer**, not a complete security solution. Be clear-eyed about what it does and doesn't do.
@@ -456,6 +484,6 @@ The Enterprise edition is commercially licensed. See [cerberus.sixsenseenterpris
 
 <div align="center">
 
-Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com)
+Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com) · [cerberus.sixsenseenterprise.com](https://cerberus.sixsenseenterprise.com)
 
 </div>
