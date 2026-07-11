@@ -21,7 +21,7 @@
   },
   "overrides": [
     {
-      "files": ["examples/**/*.ts", "spec/**/*.ts"],
+      "files": ["examples/**/*.ts", "spec/**/*.ts", "harness/**/*.ts"],
       "rules": {
         "no-console": "off"
       }

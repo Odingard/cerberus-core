@@ -132,7 +132,7 @@ There are only three controls, and they map cleanly to the trifecta. Everything 
 | **`trustOverrides`** | Marks a tool `trusted` (a privileged data source) or `untrusted` (external/injectable content). | L1 / L2 |
 | **The outbound list** (3rd arg, e.g. `['sendEmail']`) | Which tools can send data out — the ones Cerberus can block. | L3 |
 
-A block only fires when a session combines all three: a privileged read **and** untrusted content **and** an outbound send. That's why the default `threshold: 3` produces near-zero false positives — a single suspicious signal never blocks.
+A block only fires when a session combines all three: a privileged read **and** untrusted content **and** an outbound send. That's why the default `threshold: 3` is conservative — a single suspicious signal never blocks on its own.
 
 > [!WARNING]
 > **`guard()` only protects tools you give it.** A tool your agent calls that is **not** in the `executors` map runs completely unwrapped — Cerberus never sees it. A tool declared in `trustOverrides` / outbound list with **no matching executor** (a typo, a renamed tool) has its protection silently skipped. Cerberus emits a loud `console.warn` for every such gap and exposes the full picture on `GuardResult.coverage`. Set `strictCoverage: true` to turn that warning into a hard error so a misconfigured deploy can't start.
@@ -354,9 +354,9 @@ N=525 runs, `alertMode: 'log'`, same agent behavior — Cerberus wraps without b
 | **L1** — Data Source | 100% | 100% | 100% |
 | **L2** — Token Provenance | 100% | 100% | 100% |
 | **L3** — Outbound Intent | tracks attack success | tracks attack success | tracks attack success |
-| **False Positive Rate** | 0.0% | 0.0% | 0.0% |
+| **Blocking false positives (control runs)** | 0 / 30 | 0 / 30 | 0 / 30 |
 
-L1 and L2 achieve 100% across all 525 treatment runs and 30 control runs. L3 fires only when the agent actually executes an unauthorized outbound call — its rate tracks attack success, not miss rate.
+L1 and L2 achieve 100% across all 525 treatment runs and 30 control runs. L3 fires only when the agent actually executes an unauthorized outbound call — its rate tracks attack success, not miss rate. The blocking-FP row is a **count** on the 30 clean control runs per provider (no benign control run was blocked), not a rate over live traffic.
 
 ### Key findings
 
@@ -423,16 +423,24 @@ The licensed engine — durable ledger, blast-radius `B(p)`, AL3 authorship, Ope
 
 ## Performance
 
-Overhead measured against raw tool execution — no LLM or network calls, pure classification pipeline:
+Overhead measured against raw tool execution — no LLM or network calls, pure classification pipeline. **Reproduce it yourself on the shipped package:**
+
+```bash
+npm run bench
+```
+
+Reference run (Node 20, `alertMode: 'log'`, 1000 iterations) — absolute latency varies by hardware; run the command above to measure on yours:
 
 | Scenario | Overhead p50 | Overhead p99 |
 |----------|-------------|-------------|
-| readPrivateData (L1) | +32μs | <0.12ms |
-| fetchExternalContent (L2) | +17μs | <0.05ms |
-| sendOutboundReport (L3) | +0μs | <0.03ms |
-| **Full 3-call session** | **+52μs** | **+0.23ms** |
+| readPrivateData (L1) | +0.23ms | <0.57ms |
+| fetchExternalContent (L2) | +0.11ms | <0.21ms |
+| sendOutboundReport (L3) | +9μs | <0.02ms |
+| **Full 3-call session** | **+0.49ms** | **+1.33ms** |
 
-**The full Lethal Trifecta detection session adds ~52μs (p50) and ~0.23ms (p99) — well under 0.1% of a typical 600ms LLM API call.**
+**The full Lethal Trifecta detection session adds sub-millisecond overhead per tool call (~1.3ms p99 across a 3-call session) — well under 0.1% of a typical 600ms LLM API call.** The harness enforces regression thresholds, so `npm run bench` fails if overhead exceeds the budget.
+
+> **On reproducibility of published numbers.** Perf/overhead is reproducible against the shipped package via `npm run bench`. The ≥99.982% specificity (99% CI, 0 blocking FP) headline is a measured property of the enterprise Verdict-Weight governor, reproducible under the research harness and verifiable under diligence — not part of the open package.
 
 ---
 
@@ -450,7 +458,7 @@ Overhead measured against raw tool execution — no LLM or network calls, pure c
 - Startup validation is intentionally strict in production paths: `interrupt` mode with outbound tools requires both trusted and untrusted tool classification, and `memoryTracking` requires configured memory tools.
 
 **On false positives:**
-- Measured 0.0% FP on clean control runs in our validation protocol.
+- 0 benign control runs blocked (0 / 30 per provider) in our validation protocol — a count on that sample, not a claimed rate over live traffic.
 - Real-world FP rate depends on your tool configuration (trust levels, authorized destinations, threshold).
 - Threshold 3 (default) requires all three Lethal Trifecta conditions simultaneously — it does not fire on individual suspicious signals.
 

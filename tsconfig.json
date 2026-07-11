@@ -26,6 +26,6 @@
       "@cerberus-ai/core/internal": ["./src/internal.ts"]
     }
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "examples/**/*.ts", "spec/**/*.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts", "examples/**/*.ts", "spec/**/*.ts", "harness/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

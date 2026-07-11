@@ -15,7 +15,7 @@
  * instructs the agent to summarize, rephrase, or transform the data before
  * sending, making exact token matching ineffective.
  *
- * Zero false-positive risk on clean runs: if no untrusted content entered
+ * Structurally cannot fire on clean runs: if no untrusted content entered
  * context, session.untrustedSources is empty and this signal never fires.
  */
 
