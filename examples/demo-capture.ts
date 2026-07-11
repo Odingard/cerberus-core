@@ -341,7 +341,7 @@ async function main(): Promise<void> {
   line(
     `  ${DIM}Sub-classifiers active: Injection Scanner · Domain Classifier · Outbound Correlator${RESET}`,
   );
-  line(`  ${DIM}Overhead: p50 = 52μs · p99 = 0.23ms · 0% false positives${RESET}`);
+  line(`  ${DIM}Overhead: sub-ms per tool call (run \`npm run bench\` to reproduce)${RESET}`);
   line('');
   line(
     `  ${BOLD}${CYAN}cerberus.sixsenseenterprise.com${RESET}  ·  ${DIM}npm install @cerberus-ai/core${RESET}`,
