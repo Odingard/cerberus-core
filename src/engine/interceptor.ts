@@ -33,11 +33,13 @@ import { detectInjectionCorrelatedOutbound } from '../classifiers/outbound-corre
 import { detectToolChainExfiltration } from '../classifiers/tool-chain-detector.js';
 import { detectOutboundEncoding } from '../classifiers/outbound-encoding-detector.js';
 import { detectSplitExfiltration } from '../classifiers/split-exfiltration-detector.js';
+import { detectTaintedEdgeExfiltration } from '../classifiers/tainted-edge-detector.js';
 import { analyzeContextWindow } from './context-window.js';
 import { detectCrossAgentTrifecta, detectContextContamination } from './cross-agent-correlation.js';
 import { buildRiskVector } from './correlation.js';
 import { updateAgentRiskState } from '../graph/delegation.js';
-import { verifyManifestBeforeTurn } from './manifest-gate.js';
+import { enforceManifestGrantsBeforeTurn, verifyManifestBeforeTurn } from './manifest-gate.js';
+import type { AuthorityGrant, TurnAuthorityContext } from '../graph/authority-grant.js';
 import { collectToolResult } from './streaming.js';
 // Telemetry recording + enforcement-gateway dispatch are licensed surfaces
 // injected at runtime by @cerberus-ai/enterprise (open default = no-op). See
@@ -206,15 +208,43 @@ export function interceptToolCall(
     // authorization failure → BLOCKED, not a soft signal. This is what
     // makes "no valid signature → no state transition" a real gate.
     if (session.delegationGraph) {
-      const manifestSignal = verifyManifestBeforeTurn(
+      // First: signature (is the manifest authentic/untampered?). Then: grant
+      // enforcement (is the authentic grant still valid *now* and *for this
+      // purpose*?). Both are fail-closed INTEGRITY failures → BLOCKED.
+      const signatureSignal = verifyManifestBeforeTurn(
         session.delegationGraph,
         session.sessionId,
         turnId,
         config.manifestVerifier,
       );
-      if (manifestSignal) {
-        recordSignal(session, manifestSignal);
-        const gateSignals: DetectionSignal[] = [manifestSignal];
+      let gateSignal: DetectionSignal | null = signatureSignal;
+      if (!gateSignal) {
+        // The clock is read HERE, at the interceptor boundary, and injected
+        // into the pure enforcement function — never read inside the scored
+        // decision path (pre-reg invariants I3/I4).
+        const nowFn = config.authority?.now ?? Date.now;
+        const turnCtx: TurnAuthorityContext = {
+          turnTs: nowFn(),
+          ...(config.authority?.declaredPurpose !== undefined
+            ? { declaredPurpose: config.authority.declaredPurpose }
+            : {}),
+        };
+        const activeEdgeGrant: AuthorityGrant | undefined = session.currentAgentId
+          ? session.delegationGraph.edges.find(
+              (e) => e.toAgentId === session.currentAgentId && e.grant !== undefined,
+            )?.grant
+          : undefined;
+        gateSignal = enforceManifestGrantsBeforeTurn(
+          session.delegationGraph,
+          turnCtx,
+          session.sessionId,
+          turnId,
+          activeEdgeGrant,
+        );
+      }
+      if (gateSignal) {
+        recordSignal(session, gateSignal);
+        const gateSignals: DetectionSignal[] = [gateSignal];
         const gateAssessment: RiskAssessment = {
           turnId,
           vector: { l1: true, l2: true, l3: true, l4: true },
@@ -296,6 +326,23 @@ export function interceptToolCall(
       if (splitExfilSignal) {
         signals.push(splitExfilSignal);
         recordSignal(session, splitExfilSignal);
+      }
+
+      // L3 sub-classifier: tainted-edge exfiltration — catches transformed exfil
+      // whose destination rode a cross-session/cross-agent untrusted memory edge
+      // (the STUDY 2 hard regime). Only when the contamination graph is tracked.
+      if (graph) {
+        const taintedEdgeSignal = detectTaintedEdgeExfiltration(
+          ctx,
+          session,
+          graph,
+          outboundTools,
+          config.authorizedDestinations,
+        );
+        if (taintedEdgeSignal) {
+          signals.push(taintedEdgeSignal);
+          recordSignal(session, taintedEdgeSignal);
+        }
       }
 
       const driftSignal = detectBehavioralDrift(

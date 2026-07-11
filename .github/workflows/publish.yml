@@ -1,0 +1,60 @@
+name: Publish → npm (provenance)
+
+# Publishes @cerberus-ai/core to npm with SLSA provenance on a GitHub Release.
+# Provenance requires a PUBLIC source repo — this open-core repo is that source.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish @cerberus-ai/core with provenance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # SLSA provenance attestation (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck + lint + test
+        run: npm run ci
+
+      - name: Build (open core)
+        run: npm run build
+
+      - name: Guard — no paid modules in the shipped tarball
+        # This is the open-core repo; the paid engine (proxy, license/metering,
+        # OpenTelemetry, durable ledger, blast-radius/AL3, Verdict-Weight,
+        # enforcement gateways) is not present here at all. Assert it stays that
+        # way in the built dist/ before publishing.
+        run: |
+          set -e
+          for p in dist/proxy dist/license dist/telemetry dist/graph/durable-ledger.js dist/intelligence; do
+            if [ -e "$p" ]; then echo "ERROR: paid surface present in tarball: $p" && exit 1; fi
+          done
+          echo "guard OK — open detection engine + contracts only"
+
+      - name: Inspect package contents (dry run)
+        run: npm pack --dry-run 2>&1 | head -80
+
+      - name: Publish to npm with provenance
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@cerberus-ai/core@${VERSION}" version >/dev/null 2>&1; then
+            echo "@cerberus-ai/core@${VERSION} already published — skipping."
+          else
+            npm publish --provenance --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

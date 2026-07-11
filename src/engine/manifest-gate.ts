@@ -15,8 +15,15 @@
  */
 import type { DelegationGraph } from '../graph/delegation.js';
 import { getGraphVerifier, verifyGraphIntegrity } from '../graph/delegation.js';
+import type { AuthorityGrant, TurnAuthorityContext } from '../graph/authority-grant.js';
+import { enforceGrant } from '../graph/authority-grant.js';
 import type { Verifier } from '../crypto/signer.js';
-import type { ManifestSignatureInvalidSignal, SessionId, TurnId } from '../types/signals.js';
+import type {
+  AuthorityGrantViolationSignal,
+  ManifestSignatureInvalidSignal,
+  SessionId,
+  TurnId,
+} from '../types/signals.js';
 
 /**
  * Verify the session's signed manifest before a turn begins.
@@ -87,4 +94,70 @@ export function verifyManifestBeforeTurn(
     reason: available ? 'SIGNATURE_MISMATCH' : 'VERIFIER_MISSING',
     timestamp: Date.now(),
   };
+}
+
+/**
+ * Enforce the purpose-bound / time-bound authority grants carried by the
+ * session's signed manifest before a turn begins (Track B #3). Runs AFTER the
+ * signature gate — the signature proves the grant is authentic; this proves it
+ * is still valid *now* and *for this purpose*.
+ *
+ * Enforcement is a pure function of `(grant, turnContext)`: the turn timestamp
+ * and declared purpose are injected by the caller (the interceptor reads the
+ * clock at its boundary and passes the value in), never read from `Date.now()`
+ * here. This mirrors the governor's injected-TTL discipline and keeps the
+ * verdict reproducible (pre-reg invariants I3/I4).
+ *
+ * Returns the first violating {@link AuthorityGrantViolationSignal} (root
+ * manifest grant checked before the active delegated-edge grant), or `null`
+ * when every grant in force is satisfied (or absent). A violation is
+ * fail-closed: the caller must BLOCK, never downgrade to a soft alert.
+ *
+ * @param graph - The session's signed manifest (or undefined for single-agent).
+ * @param turnCtx - Injected turn context: `{ turnTs, declaredPurpose }`.
+ * @param sessionId - Session identifier to bind the signal to.
+ * @param turnId - Turn identifier to bind the signal to.
+ * @param activeEdgeGrant - Grant on the delegation edge leading to the agent
+ *   acting this turn, if any (its window/purpose is enforced alongside the root).
+ */
+export function enforceManifestGrantsBeforeTurn(
+  graph: DelegationGraph | undefined,
+  turnCtx: TurnAuthorityContext,
+  sessionId: SessionId,
+  turnId: TurnId,
+  activeEdgeGrant?: AuthorityGrant,
+): AuthorityGrantViolationSignal | null {
+  if (!graph) {
+    return null;
+  }
+
+  const manifestReason = enforceGrant(graph.grant, turnCtx);
+  if (manifestReason !== null) {
+    return {
+      layer: 'INTEGRITY',
+      signal: 'AUTHORITY_GRANT_VIOLATION',
+      turnId,
+      sessionId,
+      scope: 'MANIFEST',
+      reason: manifestReason,
+      turnTs: turnCtx.turnTs,
+      timestamp: Date.now(),
+    };
+  }
+
+  const edgeReason = enforceGrant(activeEdgeGrant, turnCtx);
+  if (edgeReason !== null) {
+    return {
+      layer: 'INTEGRITY',
+      signal: 'AUTHORITY_GRANT_VIOLATION',
+      turnId,
+      sessionId,
+      scope: 'EDGE',
+      reason: edgeReason,
+      turnTs: turnCtx.turnTs,
+      timestamp: Date.now(),
+    };
+  }
+
+  return null;
 }

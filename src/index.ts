@@ -67,6 +67,7 @@ export {
 } from './middleware/auto-classify.js';
 export type { ToolRole, ToolClassification } from './middleware/auto-classify.js';
 
+
 // Opt-in memory trace capture (records real read/write sequences, replayable)
 export {
   createTraceRecorder,
@@ -89,6 +90,7 @@ export type { MultiAgentGuardResult, SpawnAgentResult } from './middleware/multi
 export {
   createDelegationGraph,
   addAgent,
+  addSignedAgent,
   verifyGraphIntegrity,
   getGraphVerifier,
   getAgentChain,
@@ -108,6 +110,17 @@ export type {
   EnforcementPosture,
   HumanAck,
 } from './graph/delegation.js';
+
+// Purpose-bound / time-bound authority grants (Track B #3). Pure enforcement
+// of a signed manifest's (or delegated edge's) validity window + declarative
+// purpose scope, against a caller-injected turn context.
+export { enforceGrant, purposeMatches, canonicalGrant, hasGrant } from './graph/authority-grant.js';
+export type {
+  AuthorityGrant,
+  TurnAuthorityContext,
+  GrantViolationReason,
+  CanonicalGrant,
+} from './graph/authority-grant.js';
 export { deriveEnforcementPosture } from './graph/enforcement-posture.js';
 
 // Signed-manifest authorization gate (open per-turn authorization).
@@ -132,7 +145,10 @@ export type {
   Ed25519SignerOptions,
   Ed25519VerifierOptions,
 } from './crypto/signer.js';
-export { verifyManifestBeforeTurn } from './engine/manifest-gate.js';
+export {
+  verifyManifestBeforeTurn,
+  enforceManifestGrantsBeforeTurn,
+} from './engine/manifest-gate.js';
 export type { ManifestSignatureInvalidSignal } from './types/signals.js';
 export type { ToolExecutorFn } from './engine/interceptor.js';
 

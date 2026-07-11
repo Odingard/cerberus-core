@@ -216,6 +216,38 @@ export interface SplitExfiltrationSignal {
   readonly timestamp: number;
 }
 
+/**
+ * Sub-classifier signal — exfiltration of data that reached the outbound call
+ * across a TAINTED memory-read-back or agent-handoff EDGE (enhances L3).
+ *
+ * Fires when an outbound call to an UNAUTHORIZED destination, in a session that
+ * accessed privileged data, is driven by a value that crossed a tracked edge
+ * carrying cross-session/cross-agent untrusted taint AND whose content the
+ * outbound arguments demonstrably derive from (containment overlap ≥ threshold).
+ *
+ * This is the STUDY 2 hard-regime signal: it catches transformed-PII exfil where
+ * the taint entered via poisoned memory or a cross-agent handoff rather than a
+ * monitored fetch, WITHOUT relying on verbatim PII match or destination
+ * reputation. It deliberately does NOT fire on an agent re-reading its own
+ * trusted writes (no cross-session untrusted taint) nor on sends to authorized
+ * destinations (excluded first) — the two properties that keep G1 (0-blocking-FP
+ * on the benign self-read suite) intact. Pure-reasoning influence with no tracked
+ * data edge is out of scope by construction (no tainted value to derive from).
+ */
+export interface TaintedMemoryExfiltrationSignal {
+  readonly layer: 'L3';
+  readonly signal: 'TAINTED_MEMORY_EXFILTRATION';
+  readonly turnId: TurnId;
+  readonly destination: string;
+  /** The tainted memory/handoff node whose content drove the outbound. */
+  readonly taintedNodeId: string;
+  /** The untrusted origin recorded for that node (contamination source). */
+  readonly contaminationSource: string;
+  /** Containment overlap of the tainted content's tokens in the outbound args. */
+  readonly derivationScore: number;
+  readonly timestamp: number;
+}
+
 /** Cross-agent signal — Lethal Trifecta satisfied across agent boundaries. */
 export interface CrossAgentTrifectaSignal {
   readonly layer: 'CROSS_AGENT';
@@ -279,7 +311,35 @@ export interface ManifestSignatureInvalidSignal {
   readonly keyId?: string;
   /** Why verification failed (key mismatch, bad signature, missing verifier). */
   readonly reason:
-    'SIGNATURE_MISMATCH' | 'KEY_ID_MISMATCH' | 'ALGORITHM_MISMATCH' | 'VERIFIER_MISSING';
+    | 'SIGNATURE_MISMATCH'
+    | 'KEY_ID_MISMATCH'
+    | 'ALGORITHM_MISMATCH'
+    | 'VERIFIER_MISSING';
+  readonly timestamp: number;
+}
+
+/**
+ * Integrity signal — a purpose-bound / time-bound authority grant on the signed
+ * manifest (or a signed delegation edge) failed enforcement at the start of a
+ * turn. Like {@link ManifestSignatureInvalidSignal} this is a fail-closed
+ * authorization failure: it always forces `action: 'interrupt'` regardless of
+ * the configured threshold or alertMode. The grant's signature is valid — the
+ * grant is simply expired, not-yet-valid, or scoped to a different purpose than
+ * the turn declared. Enforcement is a pure function of the grant and the
+ * caller-injected turn context (see `src/graph/authority-grant.ts`).
+ */
+export interface AuthorityGrantViolationSignal {
+  readonly layer: 'INTEGRITY';
+  readonly signal: 'AUTHORITY_GRANT_VIOLATION';
+  readonly turnId: TurnId;
+  /** Session whose manifest/edge grant failed enforcement. */
+  readonly sessionId: SessionId;
+  /** Whether the failing grant was bound to the root manifest or a delegated edge. */
+  readonly scope: 'MANIFEST' | 'EDGE';
+  /** Why enforcement failed. */
+  readonly reason: 'WINDOW_NOT_YET_VALID' | 'WINDOW_EXPIRED' | 'PURPOSE_MISMATCH';
+  /** The injected turn timestamp used for the window check (epoch-ms). */
+  readonly turnTs: number;
   readonly timestamp: number;
 }
 
@@ -299,6 +359,7 @@ export type DetectionSignal =
   | MultiHopExfiltrationSignal
   | EncodedExfiltrationSignal
   | SplitExfiltrationSignal
+  | TaintedMemoryExfiltrationSignal
   | LateToolRegisteredSignal
   | InjectionAssistedRegistrationSignal
   | ScopeExpansionSignal
@@ -306,7 +367,8 @@ export type DetectionSignal =
   | CrossAgentTrifectaSignal
   | ContextContaminationSignal
   | UnauthorizedAgentSpawnSignal
-  | ManifestSignatureInvalidSignal;
+  | ManifestSignatureInvalidSignal
+  | AuthorityGrantViolationSignal;
 
 /** 4-bit risk vector — one boolean per detection layer. */
 export interface RiskVector {
