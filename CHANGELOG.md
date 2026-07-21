@@ -26,6 +26,16 @@ follows [Semantic Versioning](https://semver.org/).
   > property of the enterprise Verdict-Weight governor, reproducible under the
   > research harness and verifiable under diligence — not part of the open package.
 
+## [3.1.1]
+
+Patch release. Package metadata only — no API or behavior changes.
+
+- Repointed the `@cerberus-ai/core` package `homepage` and the README's
+  documentation/footer links from the inactive `cerberus.sixsenseenterprise.com`
+  site to the public source repository (`github.com/Odingard/cerberus-core`) and
+  the live company site (`www.sixsenseenterprise.com`). The enterprise contact
+  address is unchanged.
+
 ## [3.1.0]
 
 ### Added

@@ -13,7 +13,7 @@
 
 Cerberus watches what your AI agent's tools *do* — the private data they read, the untrusted content they ingest, and the outbound calls they make — and blocks a prompt-injection exfiltration **before the outbound tool runs**. It works at the tool-call level, so it's robust to prompt wording and model changes.
 
-[**Product**](https://cerberus.sixsenseenterprise.com) · [**npm**](https://www.npmjs.com/package/@cerberus-ai/core) · [**PyPI**](https://pypi.org/project/cerberus-ai/) · [**Enterprise**](mailto:enterprise@sixsenseenterprise.com)
+[**Product**](https://www.sixsenseenterprise.com) · [**npm**](https://www.npmjs.com/package/@cerberus-ai/core) · [**PyPI**](https://pypi.org/project/cerberus-ai/) · [**Enterprise**](mailto:enterprise@sixsenseenterprise.com)
 
 </div>
 
@@ -323,7 +323,7 @@ The detection engine is identical in both tiers. The Enterprise tier adds durabi
 | **Tamper-evident audit log, license/metering** | — | ✓ |
 | **Support** | Community | Commercial, annual license |
 
-Enterprise: [**cerberus.sixsenseenterprise.com**](https://cerberus.sixsenseenterprise.com) · [enterprise@sixsenseenterprise.com](mailto:enterprise@sixsenseenterprise.com)
+Enterprise: [**sixsenseenterprise.com**](https://www.sixsenseenterprise.com) · [enterprise@sixsenseenterprise.com](mailto:enterprise@sixsenseenterprise.com)
 
 ---
 
@@ -367,7 +367,7 @@ L1 and L2 achieve 100% across all 525 treatment runs and 30 control runs. L3 fir
 5. **Runtime detection at the tool-call level is the only stable defense** — model-level resistance is payload-specific and changes with model versions.
 
 > [!WARNING]
-> All testing was conducted in a controlled environment against systems we own, using synthetic PII fixtures. No real customer data was involved. Full methodology and the validation harness are available at [cerberus.sixsenseenterprise.com](https://cerberus.sixsenseenterprise.com).
+> All testing was conducted in a controlled environment against systems we own, using synthetic PII fixtures. No real customer data was involved. Full methodology and the validation harness ship in this repository ([Odingard/cerberus-core](https://github.com/Odingard/cerberus-core), `npm run bench`).
 
 ---
 
@@ -486,12 +486,12 @@ See [SECURITY.md](SECURITY.md) for our responsible disclosure policy.
 
 [MIT](LICENSE) — the core library is free and open source.
 
-The Enterprise edition is commercially licensed. See [cerberus.sixsenseenterprise.com](https://cerberus.sixsenseenterprise.com).
+The Enterprise edition is commercially licensed. See [sixsenseenterprise.com](https://www.sixsenseenterprise.com).
 
 ---
 
 <div align="center">
 
-Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com) · [cerberus.sixsenseenterprise.com](https://cerberus.sixsenseenterprise.com)
+Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com)
 
 </div>

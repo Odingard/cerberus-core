@@ -1,6 +1,6 @@
 {
   "name": "@cerberus-ai/core",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Runtime security for AI agent tool execution. Detects, correlates, and interrupts guarded Lethal Trifecta attack paths.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,7 +43,7 @@
   ],
   "author": "Six Sense Enterprise Services",
   "license": "MIT",
-  "homepage": "https://cerberus.sixsenseenterprise.com",
+  "homepage": "https://github.com/Odingard/cerberus-core",
   "repository": {
     "type": "git",
     "url": "https://github.com/Odingard/cerberus-core"
