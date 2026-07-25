@@ -344,7 +344,7 @@ async function main(): Promise<void> {
   line(`  ${DIM}Overhead: sub-ms per tool call (run \`npm run bench\` to reproduce)${RESET}`);
   line('');
   line(
-    `  ${BOLD}${CYAN}cerberus.sixsenseenterprise.com${RESET}  ·  ${DIM}npm install @cerberus-ai/core${RESET}`,
+    `  ${BOLD}${CYAN}cerberus.odingard.com${RESET}  ·  ${DIM}npm install @cerberus-ai/core${RESET}`,
   );
   line('');
 }

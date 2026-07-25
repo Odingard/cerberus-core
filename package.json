@@ -41,9 +41,9 @@
     "llm-security",
     "cerberus"
   ],
-  "author": "Six Sense Enterprise Services",
+  "author": "Odingard",
   "license": "MIT",
-  "homepage": "https://github.com/Odingard/cerberus-core",
+  "homepage": "https://www.odingard.com",
   "repository": {
     "type": "git",
     "url": "https://github.com/Odingard/cerberus-core"
