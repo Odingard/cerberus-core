@@ -13,7 +13,7 @@ Cerberus is a security tool. We take vulnerabilities in our own code seriously.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, please report vulnerabilities by emailing: **security@sixsenseenterprise.com**
+Instead, please report vulnerabilities by emailing: **security@odingard.com**
 
 Include:
 - A description of the vulnerability

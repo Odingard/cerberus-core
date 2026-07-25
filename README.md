@@ -13,7 +13,7 @@
 
 Cerberus watches what your AI agent's tools *do* — the private data they read, the untrusted content they ingest, and the outbound calls they make — and blocks a prompt-injection exfiltration **before the outbound tool runs**. It works at the tool-call level, so it's robust to prompt wording and model changes.
 
-[**Product**](https://www.sixsenseenterprise.com) · [**npm**](https://www.npmjs.com/package/@cerberus-ai/core) · [**PyPI**](https://pypi.org/project/cerberus-ai/) · [**Enterprise**](mailto:enterprise@sixsenseenterprise.com)
+[**Product**](https://www.odingard.com) · [**npm**](https://www.npmjs.com/package/@cerberus-ai/core) · [**PyPI**](https://pypi.org/project/cerberus-ai/) · [**Enterprise**](mailto:enterprise@odingard.com)
 
 </div>
 
@@ -323,7 +323,7 @@ The detection engine is identical in both tiers. The Enterprise tier adds durabi
 | **Tamper-evident audit log, license/metering** | — | ✓ |
 | **Support** | Community | Commercial, annual license |
 
-Enterprise: [**sixsenseenterprise.com**](https://www.sixsenseenterprise.com) · [enterprise@sixsenseenterprise.com](mailto:enterprise@sixsenseenterprise.com)
+Enterprise: [**odingard.com**](https://www.odingard.com) · [enterprise@odingard.com](mailto:enterprise@odingard.com)
 
 ---
 
@@ -486,12 +486,12 @@ See [SECURITY.md](SECURITY.md) for our responsible disclosure policy.
 
 [MIT](LICENSE) — the core library is free and open source.
 
-The Enterprise edition is commercially licensed. See [sixsenseenterprise.com](https://www.sixsenseenterprise.com).
+The Enterprise edition is commercially licensed. See [odingard.com](https://www.odingard.com).
 
 ---
 
 <div align="center">
 
-Built by [Six Sense Enterprise Services](https://www.sixsenseenterprise.com)
+Built by [Six Sense Enterprise Services](https://www.odingard.com)
 
 </div>
